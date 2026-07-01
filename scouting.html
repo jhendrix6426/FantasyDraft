@@ -116,6 +116,10 @@ tr:hover td { background: #1a1a1a; }
         <div id="m-nats"></div>
       </div>
       <div class="modal-section">
+        <div class="modal-sec-title">Match Record — 2022 to Present (registered formats only)</div>
+        <div id="m-matches"></div>
+      </div>
+      <div class="modal-section">
         <div class="modal-sec-title">Fantasy Draft History</div>
         <div id="m-fantasy"></div>
       </div>
@@ -200,59 +204,30 @@ const PLAYERS = [
   {name:'Jayden Alstad',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false}
 ];
 
-// Fantasy draft history
-const DD = {
-  2024:{champion:'John Hendrix',teams:[
-    {gm:'John Hendrix',pts:264.5,players:[
-      {name:'Justin Alstad',pts:37.0,pick:4},{name:'Jayden Alstad',pts:57.0,pick:5},
-      {name:'Joe Andrighetti',pts:41.5,pick:12},{name:'Shon Seivers',pts:41.5,pick:13},
-      {name:'James Courtney',pts:33.5,pick:20},{name:'Charles Johnson',pts:28.0,pick:28},
-      {name:'Andy Fish',pts:26.0,pick:21}]},
-    {gm:'Tyler Stevens',pts:253.0,players:[
-      {name:'Tim Estes',pts:50.0,pick:3},{name:'Jake Antonetz',pts:45.0,pick:6},
-      {name:'Zach Gilbaugh',pts:40.0,pick:11},{name:'Mitch Stewart',pts:38.0,pick:22},
-      {name:'Kye Murphy',pts:37.5,pick:19},{name:'Nathan Voigt',pts:24.5,pick:27},
-      {name:'Marc Vellake',pts:18.0,pick:14}]},
-    {gm:'Joe Schaefer',pts:196.5,players:[
-      {name:'Jacob Arrowood',pts:42.0,pick:16},{name:'Jeremy Chambers',pts:38.0,pick:1},
-      {name:'Joshua Potratz',pts:31.5,pick:8},{name:'Aiden Reisenbigler',pts:30.0,pick:24},
-      {name:'Chad Frantz',pts:24.0,pick:9},{name:'Aaron Reisenbigler',pts:18.0,pick:25},
-      {name:'Tyler Stevens',pts:13.0,pick:17}]},
-    {gm:'Jake Antonetz',pts:177.0,players:[
-      {name:'Brian Jones',pts:47.5,pick:2},{name:'John Hendrix',pts:38.0,pick:15},
-      {name:'Emmanuel Echavarria',pts:33.0,pick:18},{name:'Luke Marshall',pts:31.5,pick:7},
-      {name:'Chris Fachman',pts:15.0,pick:23},{name:'Jay Chambers',pts:12.0,pick:10},
-      {name:'Rob Mulye',pts:0,pick:26}]}
-  ]},
-  2025:{champion:'John Hendrix',teams:[
-    {gm:'John Hendrix',pts:331.0,players:[
-      {name:'Jeremy Chambers',pts:54.0,pick:4},{name:'Justin Alstad',pts:48.5,pick:5},
-      {name:'Jacob Arrowood',pts:55.0,pick:12},{name:'Kye Murphy',pts:46.5,pick:13},
-      {name:'Andy Fish',pts:39.5,pick:20},{name:'James Courtney',pts:45.5,pick:21},
-      {name:'Peter Li',pts:42.0,pick:28}]},
-    {gm:'Tyler Stevens',pts:290.0,players:[
-      {name:'Tim Estes',pts:49.5,pick:2},{name:'Joe Andrighetti',pts:44.0,pick:7},
-      {name:'Mitch Stewart',pts:45.5,pick:10},{name:'Sean Murphy',pts:44.0,pick:15},
-      {name:'Bill Voigt',pts:25.5,pick:18},{name:'Annalise Murphy',pts:34.5,pick:23},
-      {name:'Dario Villanova',pts:47.0,pick:26}]},
-    {gm:'Jamie Coller',pts:257.5,players:[
-      {name:'Brian Jones',pts:66.0,pick:3},{name:'John Hendrix',pts:22.5,pick:6},
-      {name:'Kurt Hake',pts:49.0,pick:11},{name:'Stephen Brooks',pts:27.0,pick:14},
-      {name:'Aiden Reisenbigler',pts:28.5,pick:19},{name:'Elijah Andrighetti',pts:41.0,pick:22},
-      {name:'Joshua Putney',pts:23.5,pick:27}]},
-    {gm:'Jonathan Gomez',pts:252.0,players:[
-      {name:'Jayden Alstad',pts:49.5,pick:1},{name:'Joshua Potratz',pts:36.0,pick:8},
-      {name:'Shon Seivers',pts:35.5,pick:9},{name:'Robin Dermo',pts:28.5,pick:16},
-      {name:'Chad Frantz',pts:33.0,pick:17},{name:'Nathan Voigt',pts:36.5,pick:25},
-      {name:'Jonathan Gomez',pts:33.0,pick:24}]}
-  ]}
-};
+// Fantasy draft history — populated live from the Nationals API (tournaments[].fantasyDraft)
+let DD = {};
+
+function processFantasyDraft(db) {
+  if (!db || !db.tournaments) return;
+  for (const t of db.tournaments) {
+    if (!t.fantasyDraft || !t.fantasyDraft.teams || !t.fantasyDraft.teams.length) continue;
+    const teams = t.fantasyDraft.teams.map(team => ({
+      gm: team.gm,
+      pts: team.pts,
+      players: team.players.map(p => ({name: p.name, pts: p.pts, pick: p.draftPick}))
+    }));
+    const champion = teams.reduce((best, tm) => tm.pts > best.pts ? tm : best, teams[0]).gm;
+    DD[t.year] = {champion, teams};
+  }
+}
 
 // ── DATA STORES ──────────────────────────────────────────────
 // playerNatsData[dbName][fmt] = [{yr, pts, placement, fieldSize, day}]
 let playerNatsData = {};
 // dailyPoolPts[yr][day] = [pts,...] for pool avg
 let dailyPoolPts = {};
+// playerMatchData[dbName][fmt] = [{yr, opp, scoreFor, scoreAgainst, win, round}]
+let playerMatchData = {};
 
 function normName(n) {
   return n.toLowerCase().trim().replace(/\s+/g,' ')
@@ -316,6 +291,8 @@ async function init() {
     if (!res.ok) throw new Error('HTTP '+res.status);
     const db = await res.json();
     processNats(db);
+    processFantasyDraft(db);
+    processMatches(db);
     setStatus(`Loaded. ${PLAYERS.length} players · ${Object.keys(playerNatsData).length} with Nats history (2022–present).`);
   } catch(e) {
     setStatus(`Could not load Nats data: ${e.message}. Showing players without history.`);
@@ -357,6 +334,60 @@ function processNats(db) {
     if (!dailyPoolPts[yr][day]) dailyPoolPts[yr][day] = [];
     dailyPoolPts[yr][day].push(...dayPts);
   }
+}
+
+function processMatches(db) {
+  if (!db || !db.matches) return;
+  for (const [key, matchList] of Object.entries(db.matches)) {
+    const yr = parseInt(key.split('_')[0]);
+    if (yr < 2022) continue;
+    const fmt = FMT_MAP[key.split('_').slice(1).join('_')];
+    if (!fmt) continue;
+    if (fmt === 'Teams' && yr < 2023) continue;
+
+    for (const m of matchList) {
+      if (!m.playerA || !m.playerB || !m.winner) continue;
+      addMatchRecord(m.playerA, fmt, yr, m.playerB, m.scoreA, m.scoreB, m.playerA === m.winner, m.round);
+      addMatchRecord(m.playerB, fmt, yr, m.playerA, m.scoreB, m.scoreA, m.playerB === m.winner, m.round);
+    }
+  }
+}
+
+function addMatchRecord(name, fmt, yr, opp, scoreFor, scoreAgainst, win, round) {
+  if (!playerMatchData[name]) playerMatchData[name] = {};
+  if (!playerMatchData[name][fmt]) playerMatchData[name][fmt] = [];
+  playerMatchData[name][fmt].push({yr, opp, scoreFor, scoreAgainst, win, round});
+}
+
+// Get player's match records for a format, filtered to active years
+function getPlayerMatchRecords(playerName, fmt, activeYears) {
+  for (const [dbName, fmtMap] of Object.entries(playerMatchData)) {
+    if (!namesMatch(dbName, playerName)) continue;
+    const entries = (fmtMap[fmt] || []).filter(e => activeYears.includes(e.yr));
+    return entries.length ? entries : null;
+  }
+  return null;
+}
+
+// Get ALL match records for a player across all their formats (for modal)
+function getAllPlayerMatchRecords(playerName) {
+  for (const [dbName, fmtMap] of Object.entries(playerMatchData)) {
+    if (namesMatch(dbName, playerName)) return fmtMap;
+  }
+  return null;
+}
+
+// Aggregate win/loss record across a player's registered days/formats
+function getWinStats(p, activeYears) {
+  const days = ['thu','fri','sat'].filter(d => p[d]);
+  let wins = 0, total = 0;
+  for (const day of days) {
+    const records = getPlayerMatchRecords(p.name, p[day], activeYears);
+    if (!records) continue;
+    wins += records.filter(r => r.win).length;
+    total += records.length;
+  }
+  return total ? {wins, losses: total - wins, total, pct: Math.round(wins / total * 100)} : null;
 }
 
 function getActiveYears() {
@@ -447,7 +478,8 @@ function renderTable() {
     });
     const validPersonal = stats.filter(s => s.personalAvg !== null).map(s => s.personalAvg);
     const totalAvg = validPersonal.length ? r1(validPersonal.reduce((s,v)=>s+v,0)) : null;
-    return {...p, stats, totalAvg};
+    const winStats = getWinStats(p, activeYears);
+    return {...p, stats, totalAvg, winStats};
   });
 
   // Sort
@@ -456,6 +488,7 @@ function renderTable() {
     const getVal = r => {
       if (sortKey==='days') return r.days;
       if (sortKey==='total') return r.totalAvg ?? -1;
+      if (sortKey==='winpct') return r.winStats?.pct ?? -1;
       if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
       if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
       const s = r.stats.find(s=>s.day===sortKey);
@@ -491,6 +524,7 @@ function renderTable() {
       <th onclick="toggleSort('fri')">Fri Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
       <th onclick="toggleSort('sat')">Sat Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
       <th onclick="toggleSort('total')">Total Avg</th>
+      <th onclick="toggleSort('winpct')">Win%</th>
       <th onclick="toggleSort('avgPick')">Avg Pick</th>
       <th onclick="toggleSort('avgDelta')">Slot Delta</th>
     </tr></thead><tbody>`;
@@ -505,6 +539,7 @@ function renderTable() {
       <td class="days-${p.days}">${p.days}</td>
       ${statCell(thu)}${statCell(fri)}${statCell(sat)}
       <td class="total-col">${p.totalAvg!==null?p.totalAvg:'<span class="no-hist">—</span>'}</td>
+      ${p.winStats ? `<td>${p.winStats.wins}-${p.winStats.losses} <span class="pool-avg">(${p.winStats.pct}%)</span></td>` : '<td class="no-hist">—</td>'}
       ${(()=>{ const fs=fantasyStats[p.name];
         return fs ? `<td style="color:#888">#${fs.avgPick} <span style="color:#555;font-size:10px">(${fs.appearances}x)</span></td>` : '<td class="no-hist">—</td>';
       })()}
@@ -586,6 +621,46 @@ function openModal(name) {
   }
 
   document.getElementById('m-nats').innerHTML = natsHtml || '<div class="no-data-msg">No data for registered formats.</div>';
+
+  // MATCH RECORD
+  const allMatchData = getAllPlayerMatchRecords(name);
+  let matchHtml = '';
+
+  if (allMatchData) {
+    for (const fmt of playerFmts) {
+      const records = (allMatchData[fmt]||[]).sort((a,b) => b.yr-a.yr);
+
+      if (!records.length) {
+        matchHtml += `<div style="margin-bottom:12px"><strong style="color:#888">${FMT_LABEL[fmt]||fmt}</strong> — <span class="no-hist">No 2022+ match data</span></div>`;
+        continue;
+      }
+
+      const wins = records.filter(r=>r.win).length;
+      const pct = Math.round(wins/records.length*100);
+
+      matchHtml += `<div style="margin-bottom:14px">
+        <div style="color:#c9a84c;margin-bottom:6px;font-size:12px">
+          ${fmtTag(fmt)} — Record: <strong>${wins}-${records.length-wins}</strong>
+          <span class="pool-avg">(${pct}%)</span>
+          <span class="appear-count">(${records.length} match${records.length!==1?'es':''})</span>
+        </div>
+        <table class="modal-tbl">
+          <thead><tr><th>Year</th><th>Round</th><th>Opponent</th><th class="r">Score</th><th class="c">Result</th></tr></thead>
+          <tbody>${records.map(r => `<tr>
+            <td>${r.yr}</td>
+            <td>${r.round||'—'}</td>
+            <td>${r.opp}</td>
+            <td class="r">${r.scoreFor}-${r.scoreAgainst}</td>
+            <td class="c"><span class="${r.win?'pct-high':'pct-low'}">${r.win?'W':'L'}</span></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+    }
+  } else {
+    matchHtml = '<div class="no-data-msg">No match history found for this player in 2022–present.</div>';
+  }
+
+  document.getElementById('m-matches').innerHTML = matchHtml || '<div class="no-data-msg">No data for registered formats.</div>';
 
   // FANTASY DRAFT HISTORY
   let fantHtml = '';
