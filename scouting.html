@@ -71,6 +71,19 @@ tr:hover td { background: #1a1a1a; }
 .dvs-pos { color: #4ab; }
 .dvs-neg { color: #c66; }
 .dvs-neu { color: #888; }
+
+/* CUSTOMIZE PANEL */
+.customize-bar { margin-bottom: 10px; }
+.customize-toggle-btn { background: #1a1a1a; border: 1px solid #444; color: #c9a84c; padding: 6px 12px; font-family: monospace; font-size: 12px; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px; }
+.customize-toggle-btn:hover { border-color: #c9a84c; }
+.customize-panel { display: none; gap: 32px; background: #161616; border: 1px solid #333; border-radius: 4px; padding: 14px 18px; margin-bottom: 14px; flex-wrap: wrap; }
+.customize-col { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
+.customize-title { color: #c9a84c; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+.customize-note { color: #555; font-size: 10px; max-width: 280px; margin-top: 4px; }
+.col-toggle { display: flex; align-items: center; gap: 6px; color: #aaa; font-size: 12px; cursor: pointer; }
+.col-toggle:hover { color: #ddd; }
+.weight-input { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #aaa; font-size: 12px; }
+.weight-input input[type=number] { width: 50px; background: #222; border: 1px solid #444; color: #ddd; padding: 3px 6px; font-family: monospace; font-size: 12px; min-width: 0; }
 </style>
 </head>
 <body>
@@ -94,8 +107,23 @@ tr:hover td { background: #1a1a1a; }
   <div class="filter-group"><label>Saturday</label><select id="filter-sat" onchange="renderTable()"><option value="ANY">Any</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="NONE">Not Playing</option></select></div>
   <div class="filter-group"><label>Any Format</label><select id="filter-fmt" onchange="renderTable()"><option value="ALL">All</option><option value="T1">Type 1</option><option value="T2">Type 2</option><option value="BD">Booster</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="TA">Type A</option></select></div>
   <div class="filter-group"><label>History</label><select id="filter-hist" onchange="renderTable()"><option value="ALL">All Players</option><option value="HAS">Has History</option><option value="NONE">No History</option></select></div>
-  <div class="filter-group"><label>Sort</label><select id="sort-col" onchange="renderTable()"><option value="total" selected>Total Avg</option><option value="name">Name</option><option value="days">Days</option><option value="thu">Thu Avg</option><option value="fri">Fri Avg</option><option value="sat">Sat Avg</option><option value="avgPick">Avg Draft Position</option><option value="avgDelta">Slot Delta</option></select></div>
+  <div class="filter-group"><label>Sort</label><select id="sort-col" onchange="renderTable()"><option value="total" selected>Total Avg</option><option value="name">Name</option><option value="days">Days</option><option value="thu">Thu Avg</option><option value="fri">Fri Avg</option><option value="sat">Sat Avg</option><option value="winpct">Win%</option><option value="avgPick">Avg Draft Position</option><option value="avgDelta">Slot Delta</option><option value="score">Draft Score</option></select></div>
   <div class="filter-group"><label>Draft History</label><select id="filter-draft" onchange="renderTable()"><option value="ALL">All</option><option value="HAS">Has Draft History</option><option value="NONE">Never Drafted</option><option value="OVER">Outperformed Slot</option><option value="UNDER">Underperformed Slot</option></select></div>
+</div>
+
+<div class="customize-bar">
+  <button class="customize-toggle-btn" onclick="toggleCustomizePanel()">⚙ Customize Columns &amp; Draft Score</button>
+</div>
+<div class="customize-panel" id="customize-panel">
+  <div class="customize-col">
+    <div class="customize-title">Visible Columns</div>
+    <div id="col-toggles"></div>
+  </div>
+  <div class="customize-col">
+    <div class="customize-title">Draft Score Weights</div>
+    <div id="score-weights"></div>
+    <div class="customize-note">Range -3 to 3. 0 ignores a stat; negative inverts it (e.g. favor low Slot Delta to find sleepers). Missing data counts as neutral. Sort by "Draft Score" to rank the current filtered list.</div>
+  </div>
 </div>
 
 <div id="table-wrap"></div>
@@ -429,6 +457,129 @@ function fmtTag(f) {
   return `<span class="fmt-tag fmt-${f}">${FMT_LABEL[f]||f}</span>`;
 }
 
+function statCell(s) {
+  if (!s) return '<td class="fmt-none">—</td>';
+  if (s.personalAvg !== null) {
+    const diff = s.poolAvg !== null ? r1(s.personalAvg - s.poolAvg) : null;
+    const diffCls = diff===null?'':diff>0?'vs-above':diff<0?'vs-below':'';
+    const diffStr = diff===null?'':`<span class="${diffCls}">(${diff>0?'+':''}${diff})</span>`;
+    return `<td><span class="personal">${s.personalAvg}</span> <span class="appear-count">${s.appearances}x</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span> ${diffStr}</td>`;
+  } else {
+    return `<td><span class="no-hist">—</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span></td>`;
+  }
+}
+
+// ── CUSTOMIZABLE COLUMNS ─────────────────────────────────────
+const COLUMN_DEFS = [
+  {id:'player', label:'Player', sortKey:'name', required:true,
+    render:p=>`<td><button class="name-btn" data-name="${p.name.replace(/"/g,'&quot;')}" onclick="openModal(this.dataset.name)">${p.name}</button>${p.firstNats?'<span class="first-nats">1st</span>':''}</td>`},
+  {id:'thuFmt', label:'Thu', render:p=>`<td>${fmtTag(p.thu)}</td>`},
+  {id:'friFmt', label:'Fri', render:p=>`<td>${fmtTag(p.fri)}</td>`},
+  {id:'satFmt', label:'Sat', render:p=>`<td>${fmtTag(p.sat)}</td>`},
+  {id:'days', label:'Days', sortKey:'days', render:p=>`<td class="days-${p.days}">${p.days}</td>`},
+  {id:'thuAvg', label:'Thu Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'thu', render:p=>statCell(p.stats.find(s=>s.day==='thu'))},
+  {id:'friAvg', label:'Fri Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'fri', render:p=>statCell(p.stats.find(s=>s.day==='fri'))},
+  {id:'satAvg', label:'Sat Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'sat', render:p=>statCell(p.stats.find(s=>s.day==='sat'))},
+  {id:'totalAvg', label:'Total Avg', sortKey:'total', render:p=>`<td class="total-col">${p.totalAvg!==null?p.totalAvg:'<span class="no-hist">—</span>'}</td>`},
+  {id:'winPct', label:'Win%', sortKey:'winpct', render:p=> p.winStats ? `<td>${p.winStats.wins}-${p.winStats.losses} <span class="pool-avg">(${p.winStats.pct}%)</span></td>` : '<td class="no-hist">—</td>'},
+  {id:'avgPick', label:'Avg Pick', sortKey:'avgPick', render:p=>{
+    const fs=fantasyStats[p.name];
+    return fs ? `<td style="color:#888">#${fs.avgPick} <span style="color:#555;font-size:10px">(${fs.appearances}x)</span></td>` : '<td class="no-hist">—</td>';
+  }},
+  {id:'slotDelta', label:'Slot Delta', sortKey:'avgDelta', render:p=>{
+    const fs=fantasyStats[p.name];
+    if(!fs) return '<td class="no-hist">—</td>';
+    const cls=fs.avgDelta>0?'vs-above':fs.avgDelta<0?'vs-below':'';
+    return `<td class="${cls}">${fs.avgDelta>0?'+':''}${fs.avgDelta}</td>`;
+  }},
+  {id:'score', label:'Draft Score', sortKey:'score', render:p=> p.score!==null ? `<td class="total-col">${p.score}</td>` : '<td class="no-hist">—</td>'}
+];
+
+const SCORE_STATS = {
+  total:    {label:'Total Avg (Nats)',      get:r=>r.totalAvg},
+  winpct:   {label:'Win %',                 get:r=>r.winStats?.pct ?? null},
+  avgDelta: {label:'Fantasy Slot Delta',     get:r=>fantasyStats[r.name]?.avgDelta ?? null}
+};
+
+let visibleCols = new Set(COLUMN_DEFS.map(c=>c.id));
+let scoreWeights = {total:1, winpct:1, avgDelta:1};
+
+function loadPrefs() {
+  try {
+    const vc = JSON.parse(localStorage.getItem('scouting-visible-cols'));
+    if (Array.isArray(vc) && vc.length) visibleCols = new Set(vc);
+  } catch(e) {}
+  try {
+    const sw = JSON.parse(localStorage.getItem('scouting-score-weights'));
+    if (sw && typeof sw==='object') scoreWeights = {...scoreWeights, ...sw};
+  } catch(e) {}
+}
+
+function savePrefs() {
+  localStorage.setItem('scouting-visible-cols', JSON.stringify([...visibleCols]));
+  localStorage.setItem('scouting-score-weights', JSON.stringify(scoreWeights));
+}
+
+function buildCustomizePanel() {
+  document.getElementById('col-toggles').innerHTML = COLUMN_DEFS.filter(c=>!c.required).map(c => `
+    <label class="col-toggle">
+      <input type="checkbox" data-col="${c.id}" ${visibleCols.has(c.id)?'checked':''} onchange="onColToggle(this)">
+      ${c.label.replace(/<[^>]+>/g,'')}
+    </label>`).join('');
+
+  document.getElementById('score-weights').innerHTML = Object.entries(SCORE_STATS).map(([key, s]) => `
+    <label class="weight-input">
+      ${s.label}
+      <input type="number" min="-3" max="3" step="1" value="${scoreWeights[key]}" data-weight="${key}" onchange="onWeightChange(this)">
+    </label>`).join('');
+}
+
+function onColToggle(el) {
+  const id = el.dataset.col;
+  if (el.checked) visibleCols.add(id); else visibleCols.delete(id);
+  savePrefs();
+  renderTable();
+}
+
+function onWeightChange(el) {
+  const key = el.dataset.weight;
+  scoreWeights[key] = parseInt(el.value, 10) || 0;
+  savePrefs();
+  renderTable();
+}
+
+function toggleCustomizePanel() {
+  const panel = document.getElementById('customize-panel');
+  panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+}
+
+// Weighted composite Draft Score, normalized 0-100 across the currently filtered rows.
+// Missing data defaults to a neutral midpoint so players without history aren't zeroed out.
+function computeScores(rows) {
+  const ranges = {};
+  for (const [key, s] of Object.entries(SCORE_STATS)) {
+    const vals = rows.map(s.get).filter(v => v !== null && v !== undefined);
+    ranges[key] = vals.length ? {min: Math.min(...vals), max: Math.max(...vals)} : null;
+  }
+  const totalWeight = Object.values(scoreWeights).reduce((sum,w) => sum + Math.abs(w), 0);
+  for (const r of rows) {
+    if (!totalWeight) { r.score = null; continue; }
+    let sum = 0;
+    for (const [key, s] of Object.entries(SCORE_STATS)) {
+      const w = scoreWeights[key] || 0;
+      if (!w) continue;
+      const range = ranges[key];
+      const val = s.get(r);
+      let norm = 50;
+      if (val !== null && val !== undefined && range && range.max > range.min) {
+        norm = ((val - range.min) / (range.max - range.min)) * 100;
+      }
+      sum += w * norm;
+    }
+    r.score = r1(sum / totalWeight);
+  }
+}
+
 // ── RENDER TABLE ─────────────────────────────────────────────
 let sortKey = 'total', sortDir = -1;
 
@@ -482,6 +633,8 @@ function renderTable() {
     return {...p, stats, totalAvg, winStats};
   });
 
+  computeScores(rows);
+
   // Sort
   rows.sort((a,b) => {
     if (sortKey==='name') return a.name.localeCompare(b.name)*sortDir;
@@ -491,6 +644,7 @@ function renderTable() {
       if (sortKey==='winpct') return r.winStats?.pct ?? -1;
       if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
       if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
+      if (sortKey==='score') return r.score ?? -999;
       const s = r.stats.find(s=>s.day===sortKey);
       return s?.personalAvg ?? -1;
     };
@@ -502,57 +656,19 @@ function renderTable() {
     return;
   }
 
-  // Stat cell renderer
-  function statCell(s) {
-    if (!s) return '<td class="fmt-none">—</td>';
-    if (s.personalAvg !== null) {
-      const diff = s.poolAvg !== null ? r1(s.personalAvg - s.poolAvg) : null;
-      const diffCls = diff===null?'':diff>0?'vs-above':diff<0?'vs-below':'';
-      const diffStr = diff===null?'':`<span class="${diffCls}">(${diff>0?'+':''}${diff})</span>`;
-      return `<td><span class="personal">${s.personalAvg}</span> <span class="appear-count">${s.appearances}x</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span> ${diffStr}</td>`;
-    } else {
-      return `<td><span class="no-hist">—</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span></td>`;
-    }
-  }
+  const activeColumns = COLUMN_DEFS.filter(c => c.required || visibleCols.has(c.id));
 
   let html = `<table>
     <thead><tr>
-      <th onclick="toggleSort('name')">Player</th>
-      <th>Thu</th><th>Fri</th><th>Sat</th>
-      <th onclick="toggleSort('days')">Days</th>
-      <th onclick="toggleSort('thu')">Thu Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('fri')">Fri Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('sat')">Sat Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('total')">Total Avg</th>
-      <th onclick="toggleSort('winpct')">Win%</th>
-      <th onclick="toggleSort('avgPick')">Avg Pick</th>
-      <th onclick="toggleSort('avgDelta')">Slot Delta</th>
+      ${activeColumns.map(c => c.sortKey ? `<th onclick="toggleSort('${c.sortKey}')">${c.label}</th>` : `<th>${c.label}</th>`).join('')}
     </tr></thead><tbody>`;
 
   for (const p of rows) {
-    const thu = p.stats.find(s=>s.day==='thu');
-    const fri = p.stats.find(s=>s.day==='fri');
-    const sat = p.stats.find(s=>s.day==='sat');
-    html += `<tr>
-      <td><button class="name-btn" data-name="${p.name.replace(/"/g,'&quot;')}" onclick="openModal(this.dataset.name)">${p.name}</button>${p.firstNats?'<span class="first-nats">1st</span>':''}</td>
-      <td>${fmtTag(p.thu)}</td><td>${fmtTag(p.fri)}</td><td>${fmtTag(p.sat)}</td>
-      <td class="days-${p.days}">${p.days}</td>
-      ${statCell(thu)}${statCell(fri)}${statCell(sat)}
-      <td class="total-col">${p.totalAvg!==null?p.totalAvg:'<span class="no-hist">—</span>'}</td>
-      ${p.winStats ? `<td>${p.winStats.wins}-${p.winStats.losses} <span class="pool-avg">(${p.winStats.pct}%)</span></td>` : '<td class="no-hist">—</td>'}
-      ${(()=>{ const fs=fantasyStats[p.name];
-        return fs ? `<td style="color:#888">#${fs.avgPick} <span style="color:#555;font-size:10px">(${fs.appearances}x)</span></td>` : '<td class="no-hist">—</td>';
-      })()}
-      ${(()=>{ const fs=fantasyStats[p.name];
-        if(!fs) return '<td class="no-hist">—</td>';
-        const cls=fs.avgDelta>0?'vs-above':fs.avgDelta<0?'vs-below':'';
-        return `<td class="${cls}">${fs.avgDelta>0?'+':''}${fs.avgDelta}</td>`;
-      })()}
-    </tr>`;
+    html += `<tr>${activeColumns.map(c => c.render(p)).join('')}</tr>`;
   }
 
   html += `</tbody></table>
-    <div class="footer-note">${rows.length} players shown. Format: Personal avg Nx / Pool avg (±diff). Pool avg = all players across both formats that day. Click player name for full profile.</div>`;
+    <div class="footer-note">${rows.length} players shown. Format: Personal avg Nx / Pool avg (±diff). Pool avg = all players across both formats that day. Draft Score = weighted blend of the stats configured above, normalized 0-100 across the players currently shown. Click player name for full profile.</div>`;
 
   document.getElementById('table-wrap').innerHTML = html;
 }
@@ -722,6 +838,8 @@ function closeModal() {
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
+loadPrefs();
+buildCustomizePanel();
 init();
 </script>
 </body>
