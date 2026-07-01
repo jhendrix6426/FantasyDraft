@@ -3,651 +3,83 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fantasy Draft Scouting</title>
+<title>Fantasy Draft</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: monospace; background: #111; color: #ddd; padding: 16px; font-size: 13px; }
-h1 { color: #c9a84c; margin-bottom: 16px; font-size: 18px; }
-.status { color: #888; margin-bottom: 12px; font-size: 12px; min-height: 16px; }
-.filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
-.filter-group { display: flex; flex-direction: column; gap: 4px; }
-.filter-group label { color: #aaa; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-select, input[type=text] { background: #222; border: 1px solid #444; color: #ddd; padding: 5px 8px; font-family: monospace; font-size: 12px; min-width: 100px; }
-.year-toggles { margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.year-toggles span { color: #aaa; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-.year-toggles label { color: #888; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-.year-note { color: #555; font-size: 11px; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #444; color: #c9a84c; white-space: nowrap; cursor: pointer; user-select: none; }
-th:hover { color: #e8c55a; }
-th.sort-asc::after { content: ' ↑'; }
-th.sort-desc::after { content: ' ↓'; }
-td { padding: 5px 8px; border-bottom: 1px solid #1e1e1e; vertical-align: middle; white-space: nowrap; }
-tr:hover td { background: #1a1a1a; }
-.fmt-tag { display: inline-block; padding: 1px 5px; border-radius: 2px; font-size: 11px; }
-.fmt-T1 { background: #1a2a3a; color: #7ab; border: 1px solid #2a4060; }
-.fmt-T2 { background: #2a1a1a; color: #c88; border: 1px solid #4a1a1a; }
-.fmt-BD { background: #1a2a2a; color: #7bb; border: 1px solid #1a4040; }
-.fmt-SD { background: #2a2a1a; color: #bb7; border: 1px solid #404010; }
-.fmt-Teams { background: #2a1a2a; color: #b7b; border: 1px solid #401a40; }
-.fmt-TA { background: #2a1a2a; color: #c7a; border: 1px solid #3a1a30; }
-.fmt-none { color: #444; }
-.personal { color: #c9a84c; font-weight: bold; }
-.pool-avg { color: #666; }
-.vs-above { color: #4ab; }
-.vs-below { color: #c66; }
-.no-hist { color: #444; }
-.total-col { color: #c9a84c; font-weight: bold; }
-.days-3 { color: #4ab; }
-.days-2 { color: #c9a84c; }
-.days-1 { color: #c66; }
-.first-nats { color: #4ab; font-size: 10px; margin-left: 4px; }
-.appear-count { color: #555; font-size: 10px; }
-.name-btn { background: none; border: none; color: #c9a84c; font-size: 12px; font-weight: bold; cursor: pointer; font-family: monospace; padding: 0; text-decoration: underline; text-underline-offset: 2px; text-align: left; }
-.name-btn:hover { color: #e8c55a; }
-.footer-note { color: #555; font-size: 11px; margin-top: 8px; }
-
-/* MODAL */
-.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 1000; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 20px; }
-.modal-bg.open { display: flex; }
-.modal { background: #1a1a1a; border: 1px solid #444; border-radius: 4px; width: 100%; max-width: 700px; margin: auto; padding: 0; overflow: hidden; }
-.modal-head { background: #222; padding: 16px 20px; border-bottom: 1px solid #333; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.modal-name { color: #c9a84c; font-size: 18px; font-weight: bold; }
-.modal-meta { color: #888; font-size: 11px; margin-top: 4px; }
-.modal-close { background: none; border: 1px solid #444; color: #888; padding: 4px 12px; cursor: pointer; font-family: monospace; font-size: 12px; flex-shrink: 0; }
-.modal-close:hover { color: #ddd; border-color: #888; }
-.modal-body { padding: 16px 20px; }
-.modal-section { margin-bottom: 20px; }
-.modal-sec-title { color: #c9a84c; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 6px; margin-bottom: 10px; }
-.modal-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
-.modal-tbl th { text-align: left; padding: 5px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #666; border-bottom: 1px solid #333; font-weight: normal; }
-.modal-tbl td { padding: 5px 8px; border-bottom: 1px solid #1e1e1e; }
-.modal-tbl .r { text-align: right; }
-.modal-tbl .c { text-align: center; }
-.pct-high { color: #4ab; }
-.pct-mid { color: #c9a84c; }
-.pct-low { color: #c66; }
-.no-data-msg { color: #555; font-size: 12px; padding: 8px 0; }
-.dvs-pos { color: #4ab; }
-.dvs-neg { color: #c66; }
-.dvs-neu { color: #888; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #ddd;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 0;
+    background: #0a0a0a;
+    border-bottom: 2px solid #c9202f;
+  }
+  .logo {
+    height: 110px;
+    width: auto;
+    margin-bottom: 12px;
+  }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    max-width: 900px;
+    justify-content: center;
+  }
+  nav.tabs button {
+    background: #141414;
+    border: 1px solid #333;
+    border-bottom: none;
+    color: #999;
+    font-family: monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+  }
+  nav.tabs button.active {
+    background: #1a1a1a;
+    color: #c9a84c;
+    border-color: #c9a84c;
+  }
+  nav.tabs button:disabled {
+    color: #444;
+    cursor: default;
+  }
+  nav.tabs button:not(:disabled):not(.active):hover {
+    color: #ddd;
+  }
+  main {
+    flex: 1;
+    background: #1a1a1a;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
 </style>
 </head>
 <body>
-<h1>2026 Fantasy Draft — Scouting</h1>
-<div class="status" id="status">Loading Nationals history...</div>
-
-<div class="year-toggles">
-  <span>Include Years:</span>
-  <label><input type="checkbox" id="yr-2022" checked onchange="renderTable()"> 2022</label>
-  <label><input type="checkbox" id="yr-2023" checked onchange="renderTable()"> 2023</label>
-  <label><input type="checkbox" id="yr-2024" checked onchange="renderTable()"> 2024</label>
-  <label><input type="checkbox" id="yr-2025" checked onchange="renderTable()"> 2025</label>
-  <span class="year-note">(Teams uses 2023+ only regardless of selection)</span>
-</div>
-
-<div class="filters">
-  <div class="filter-group"><label>Search</label><input type="text" id="search" placeholder="Player name..." oninput="renderTable()"></div>
-  <div class="filter-group"><label>Days</label><select id="filter-days" onchange="renderTable()"><option value="ALL">Any</option><option value="3">3 days</option><option value="2">2 days</option><option value="1">1 day</option></select></div>
-  <div class="filter-group"><label>Thursday</label><select id="filter-thu" onchange="renderTable()"><option value="ANY">Any</option><option value="BD">Booster</option><option value="T2">Type 2</option><option value="TA">Type A</option><option value="NONE">Not Playing</option></select></div>
-  <div class="filter-group"><label>Friday</label><select id="filter-fri" onchange="renderTable()"><option value="ANY">Any</option><option value="T1">Type 1</option><option value="T2">Type 2</option><option value="TA">Type A</option><option value="NONE">Not Playing</option></select></div>
-  <div class="filter-group"><label>Saturday</label><select id="filter-sat" onchange="renderTable()"><option value="ANY">Any</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="NONE">Not Playing</option></select></div>
-  <div class="filter-group"><label>Any Format</label><select id="filter-fmt" onchange="renderTable()"><option value="ALL">All</option><option value="T1">Type 1</option><option value="T2">Type 2</option><option value="BD">Booster</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="TA">Type A</option></select></div>
-  <div class="filter-group"><label>History</label><select id="filter-hist" onchange="renderTable()"><option value="ALL">All Players</option><option value="HAS">Has History</option><option value="NONE">No History</option></select></div>
-  <div class="filter-group"><label>Sort</label><select id="sort-col" onchange="renderTable()"><option value="total" selected>Total Avg</option><option value="name">Name</option><option value="days">Days</option><option value="thu">Thu Avg</option><option value="fri">Fri Avg</option><option value="sat">Sat Avg</option><option value="avgPick">Avg Draft Position</option><option value="avgDelta">Slot Delta</option></select></div>
-  <div class="filter-group"><label>Draft History</label><select id="filter-draft" onchange="renderTable()"><option value="ALL">All</option><option value="HAS">Has Draft History</option><option value="NONE">Never Drafted</option><option value="OVER">Outperformed Slot</option><option value="UNDER">Underperformed Slot</option></select></div>
-</div>
-
-<div id="table-wrap"></div>
-
-<!-- PLAYER MODAL -->
-<div class="modal-bg" id="player-modal" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
-    <div class="modal-head">
-      <div>
-        <div class="modal-name" id="m-name">—</div>
-        <div class="modal-meta" id="m-meta">—</div>
-      </div>
-      <button class="modal-close" onclick="closeModal()">Close ✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="modal-section">
-        <div class="modal-sec-title">Nationals History — 2022 to Present (registered formats only)</div>
-        <div id="m-nats"></div>
-      </div>
-      <div class="modal-section">
-        <div class="modal-sec-title">Fantasy Draft History</div>
-        <div id="m-fantasy"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
-
-const FMT_MAP = {
-  'T1 2-Player':'T1','T2 2-Player':'T2','Booster Draft':'BD',
-  'Sealed':'SD','Teams':'Teams','Type A':'TA','Booster Draft (Multi)':'BD'
-};
-const FMT_LABEL = {T1:'Type 1',T2:'Type 2',BD:'Booster',SD:'Sealed',Teams:'Teams',TA:'Type A'};
-const FMT_TO_DAY = {BD:'thu',T2:'thu',T1:'fri',TA:'fri',SD:'sat',Teams:'sat'};
-const DAY_LABEL = {thu:'Thu',fri:'Fri',sat:'Sat'};
-
-const PLAYERS = [
-  {name:'Jonathan Greeson',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Josue Martinez',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Brayden Babij',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Derek Tirado',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Keegan Hendrix',thu:'BD',fri:null,sat:'Teams',days:2,firstNats:false},
-  {name:'Aiden Reisenbigler',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Chad Frantz',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Phillip Anderson',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Samuel Austin',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Roy Harbold',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Rylan Harbold',thu:null,fri:'TA',sat:'SD',days:2,firstNats:true},
-  {name:'Brandon Wade',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Brandon Swango',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Kye Murphy',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Shon Seivers',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Talon Rhoades',thu:'BD',fri:'TA',sat:'SD',days:3,firstNats:true},
-  {name:'Maylee Rhoades',thu:'BD',fri:'TA',sat:'SD',days:3,firstNats:true},
-  {name:'Sean Rhoades',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Kayleb Matthews',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Luke Hull',thu:null,fri:'T1',sat:'Teams',days:2,firstNats:true},
-  {name:'Andy Fish',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Joseph Roberts',thu:'T2',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jonathan Steckmann',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Mitchell Stewart',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Mark Underwood',thu:null,fri:'T1',sat:'Teams',days:2,firstNats:false},
-  {name:'Joshua Potratz',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jeremy Chambers',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Jacob Arrowood',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jonathan Gomez',thu:'T2',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Dario Dante Villanova',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'John Michaliszyn',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Elijah Andrighetti',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Tyler Stevens',thu:'T2',fri:null,sat:null,days:1,firstNats:false},
-  {name:'Xavier Maddux',thu:'BD',fri:'TA',sat:'Teams',days:3,firstNats:true},
-  {name:'Timothy Maddux',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Kyle Hostutler',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Eli Mulye',thu:'T2',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Rob Mulye',thu:null,fri:null,sat:'SD',days:1,firstNats:false},
-  {name:'Dylan Thomas',thu:null,fri:'T1',sat:null,days:1,firstNats:true},
-  {name:'Elias Spiller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jason Ricci',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Charles Loria',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Benjamin Hull',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Kurt Hake',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Raymond Celotto',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Robin Dermo',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Nic Marshall',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Maxwell Graf',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Luke Marshall',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'James Courtney',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Marc Vellake',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Emmanuel Echavarria',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Justin Alstad',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Royce Russell',thu:null,fri:'T1',sat:null,days:1,firstNats:true},
-  {name:'Joe Andrighetti',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Luke Anderson',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Stephen Brooks',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Tim Estes',thu:'T2',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Stephen Coates',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jay Chambers',thu:null,fri:'T1',sat:null,days:1,firstNats:false},
-  {name:'Liam Coller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jamie Coller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jayden Alstad',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false}
-];
-
-// Fantasy draft history
-const DD = {
-  2024:{champion:'John Hendrix',teams:[
-    {gm:'John Hendrix',pts:264.5,players:[
-      {name:'Justin Alstad',pts:37.0,pick:4},{name:'Jayden Alstad',pts:57.0,pick:5},
-      {name:'Joe Andrighetti',pts:41.5,pick:12},{name:'Shon Seivers',pts:41.5,pick:13},
-      {name:'James Courtney',pts:33.5,pick:20},{name:'Charles Johnson',pts:28.0,pick:28},
-      {name:'Andy Fish',pts:26.0,pick:21}]},
-    {gm:'Tyler Stevens',pts:253.0,players:[
-      {name:'Tim Estes',pts:50.0,pick:3},{name:'Jake Antonetz',pts:45.0,pick:6},
-      {name:'Zach Gilbaugh',pts:40.0,pick:11},{name:'Mitch Stewart',pts:38.0,pick:22},
-      {name:'Kye Murphy',pts:37.5,pick:19},{name:'Nathan Voigt',pts:24.5,pick:27},
-      {name:'Marc Vellake',pts:18.0,pick:14}]},
-    {gm:'Joe Schaefer',pts:196.5,players:[
-      {name:'Jacob Arrowood',pts:42.0,pick:16},{name:'Jeremy Chambers',pts:38.0,pick:1},
-      {name:'Joshua Potratz',pts:31.5,pick:8},{name:'Aiden Reisenbigler',pts:30.0,pick:24},
-      {name:'Chad Frantz',pts:24.0,pick:9},{name:'Aaron Reisenbigler',pts:18.0,pick:25},
-      {name:'Tyler Stevens',pts:13.0,pick:17}]},
-    {gm:'Jake Antonetz',pts:177.0,players:[
-      {name:'Brian Jones',pts:47.5,pick:2},{name:'John Hendrix',pts:38.0,pick:15},
-      {name:'Emmanuel Echavarria',pts:33.0,pick:18},{name:'Luke Marshall',pts:31.5,pick:7},
-      {name:'Chris Fachman',pts:15.0,pick:23},{name:'Jay Chambers',pts:12.0,pick:10},
-      {name:'Rob Mulye',pts:0,pick:26}]}
-  ]},
-  2025:{champion:'John Hendrix',teams:[
-    {gm:'John Hendrix',pts:331.0,players:[
-      {name:'Jeremy Chambers',pts:54.0,pick:4},{name:'Justin Alstad',pts:48.5,pick:5},
-      {name:'Jacob Arrowood',pts:55.0,pick:12},{name:'Kye Murphy',pts:46.5,pick:13},
-      {name:'Andy Fish',pts:39.5,pick:20},{name:'James Courtney',pts:45.5,pick:21},
-      {name:'Peter Li',pts:42.0,pick:28}]},
-    {gm:'Tyler Stevens',pts:290.0,players:[
-      {name:'Tim Estes',pts:49.5,pick:2},{name:'Joe Andrighetti',pts:44.0,pick:7},
-      {name:'Mitch Stewart',pts:45.5,pick:10},{name:'Sean Murphy',pts:44.0,pick:15},
-      {name:'Bill Voigt',pts:25.5,pick:18},{name:'Annalise Murphy',pts:34.5,pick:23},
-      {name:'Dario Villanova',pts:47.0,pick:26}]},
-    {gm:'Jamie Coller',pts:257.5,players:[
-      {name:'Brian Jones',pts:66.0,pick:3},{name:'John Hendrix',pts:22.5,pick:6},
-      {name:'Kurt Hake',pts:49.0,pick:11},{name:'Stephen Brooks',pts:27.0,pick:14},
-      {name:'Aiden Reisenbigler',pts:28.5,pick:19},{name:'Elijah Andrighetti',pts:41.0,pick:22},
-      {name:'Joshua Putney',pts:23.5,pick:27}]},
-    {gm:'Jonathan Gomez',pts:252.0,players:[
-      {name:'Jayden Alstad',pts:49.5,pick:1},{name:'Joshua Potratz',pts:36.0,pick:8},
-      {name:'Shon Seivers',pts:35.5,pick:9},{name:'Robin Dermo',pts:28.5,pick:16},
-      {name:'Chad Frantz',pts:33.0,pick:17},{name:'Nathan Voigt',pts:36.5,pick:25},
-      {name:'Jonathan Gomez',pts:33.0,pick:24}]}
-  ]}
-};
-
-// ── DATA STORES ──────────────────────────────────────────────
-// playerNatsData[dbName][fmt] = [{yr, pts, placement, fieldSize, day}]
-let playerNatsData = {};
-// dailyPoolPts[yr][day] = [pts,...] for pool avg
-let dailyPoolPts = {};
-
-function normName(n) {
-  return n.toLowerCase().trim().replace(/\s+/g,' ')
-    .replace(/\bmitch\b/,'mitchell')
-    .replace(/jayden alstand/,'jayden alstad')
-    .replace(/dario dante villanova/,'dario dante villanova')
-    .replace(/^dario villanova$/,'dario dante villanova');
-}
-function namesMatch(a,b) {
-  const na=normName(a), nb=normName(b);
-  if(na===nb) return true;
-  const pa=na.split(' '), pb=nb.split(' ');
-  if(pa.length<2 || pb.length<2) return false;
-  // Last names must match exactly
-  if(pa[pa.length-1] !== pb[pb.length-1]) return false;
-  // First names must match exactly OR one must start with the other
-  // (handles Mitch/Mitchell, etc.) but NOT partial last-name-only matches
-  const fa=pa[0], fb=pb[0];
-  return fa===fb || fa.startsWith(fb) || fb.startsWith(fa);
-}
-
-function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null; }
-function r1(n) { return n!==null ? Math.round(n*10)/10 : null; }
-
-// Pre-computed fantasy stats: {name: {avgPick, avgPts, appearances, avgDelta}}
-const fantasyStats = {};
-
-function buildFantasyStats() {
-  for (const p of PLAYERS) {
-    const entries = [];
-    for (const [yr, data] of Object.entries(DD)) {
-      for (const team of data.teams) {
-        const pick = team.players.find(pk => namesMatch(pk.name, p.name));
-        if (!pick) continue;
-        // 2-round window delta
-        const allPicks = data.teams.flatMap(t=>t.players).sort((a,b)=>a.pick-b.pick);
-        const total = allPicks.length;
-        const wStart = Math.max(1, pick.pick-4);
-        const wEnd = Math.min(total, Math.max(wStart+7, pick.pick+3));
-        const window = allPicks.filter(pk=>pk.pick>=wStart&&pk.pick<=wEnd&&!namesMatch(pk.name,p.name));
-        const windowAvg = window.length ? avg(window.map(pk=>pk.pts)) : pick.pts;
-        const delta = r1(pick.pts - windowAvg);
-        entries.push({yr:parseInt(yr), pts:pick.pts, pick:pick.pick, delta, gm:team.gm});
-      }
-    }
-    if (entries.length) {
-      fantasyStats[p.name] = {
-        appearances: entries.length,
-        avgPick: r1(avg(entries.map(e=>e.pick))),
-        avgPts: r1(avg(entries.map(e=>e.pts))),
-        avgDelta: r1(avg(entries.map(e=>e.delta))),
-        entries
-      };
-    }
-  }
-}
-
-async function init() {
-  try {
-    const res = await fetch(NATS_URL, {signal: AbortSignal.timeout(15000)});
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    const db = await res.json();
-    processNats(db);
-    setStatus(`Loaded. ${PLAYERS.length} players · ${Object.keys(playerNatsData).length} with Nats history (2022–present).`);
-  } catch(e) {
-    setStatus(`Could not load Nats data: ${e.message}. Showing players without history.`);
-  }
-  buildFantasyStats();
-  renderTable();
-}
-
-function processNats(db) {
-  if (!db || !db.results) return;
-  for (const [key, results] of Object.entries(db.results)) {
-    const yr = parseInt(key.split('_')[0]);
-    if (yr < 2022) continue;
-    const fmt = FMT_MAP[key.split('_').slice(1).join('_')];
-    if (!fmt) continue;
-    // Teams: use 2023+ only
-    if (fmt === 'Teams' && yr < 2023) continue;
-    const day = FMT_TO_DAY[fmt];
-    if (!day) continue;
-
-    // Collect all pts for this result set (daily pool)
-    const dayPts = [];
-    for (const r of results) {
-      if (!r.notes) continue;
-      const m = r.notes.match(/([\d.]+)pts/);
-      if (!m) continue;
-      const pts = parseFloat(m[1]);
-      dayPts.push(pts);
-
-      // Per-player storage
-      const nm = r.playerName;
-      if (!playerNatsData[nm]) playerNatsData[nm] = {};
-      if (!playerNatsData[nm][fmt]) playerNatsData[nm][fmt] = [];
-      playerNatsData[nm][fmt].push({yr, pts, dbPlacement: r.placement, fieldSize: results.length, day});
-    }
-
-    // Daily pool storage
-    if (!dailyPoolPts[yr]) dailyPoolPts[yr] = {};
-    if (!dailyPoolPts[yr][day]) dailyPoolPts[yr][day] = [];
-    dailyPoolPts[yr][day].push(...dayPts);
-  }
-}
-
-function getActiveYears() {
-  return [2022,2023,2024,2025].filter(yr => {
-    const cb = document.getElementById('yr-'+yr);
-    return cb && cb.checked;
-  });
-}
-
-// Get player's entries for a format, filtered to active years
-function getPlayerEntries(playerName, fmt, activeYears) {
-  for (const [dbName, fmtMap] of Object.entries(playerNatsData)) {
-    if (!namesMatch(dbName, playerName)) continue;
-    const entries = (fmtMap[fmt] || []).filter(e => activeYears.includes(e.yr));
-    return entries.length ? entries : null;
-  }
-  return null;
-}
-
-// Get ALL entries for a player across all their formats (for modal)
-function getAllPlayerNatsEntries(playerName) {
-  for (const [dbName, fmtMap] of Object.entries(playerNatsData)) {
-    if (namesMatch(dbName, playerName)) return fmtMap;
-  }
-  return null;
-}
-
-function getPoolAvg(day, activeYears) {
-  const pts = [];
-  for (const [yr, days] of Object.entries(dailyPoolPts)) {
-    if (!activeYears.includes(parseInt(yr))) continue;
-    if (days[day]) pts.push(...days[day]);
-  }
-  return pts.length ? r1(avg(pts)) : null;
-}
-
-function fmtTag(f) {
-  if (!f) return '<span class="fmt-none">—</span>';
-  return `<span class="fmt-tag fmt-${f}">${FMT_LABEL[f]||f}</span>`;
-}
-
-// ── RENDER TABLE ─────────────────────────────────────────────
-let sortKey = 'total', sortDir = -1;
-
-function renderTable() {
-  const search = document.getElementById('search').value.toLowerCase();
-  const fDays = document.getElementById('filter-days').value;
-  const fThu = document.getElementById('filter-thu').value;
-  const fFri = document.getElementById('filter-fri').value;
-  const fSat = document.getElementById('filter-sat').value;
-  const fFmt = document.getElementById('filter-fmt').value;
-  const fHist = document.getElementById('filter-hist').value;
-  sortKey = document.getElementById('sort-col').value;
-  const activeYears = getActiveYears();
-
-  let players = PLAYERS.filter(p => {
-    if (search && !p.name.toLowerCase().includes(search)) return false;
-    if (fDays !== 'ALL' && p.days !== parseInt(fDays)) return false;
-    if (fThu !== 'ANY') { if (fThu==='NONE'?p.thu!==null:p.thu!==fThu) return false; }
-    if (fFri !== 'ANY') { if (fFri==='NONE'?p.fri!==null:p.fri!==fFri) return false; }
-    if (fSat !== 'ANY') { if (fSat==='NONE'?p.sat!==null:p.sat!==fSat) return false; }
-    if (fFmt !== 'ALL' && p.thu!==fFmt && p.fri!==fFmt && p.sat!==fFmt) return false;
-    if (fHist !== 'ALL') {
-      const has = ['thu','fri','sat'].some(d => p[d] && getPlayerEntries(p.name, p[d], activeYears));
-      if (fHist==='HAS' && !has) return false;
-      if (fHist==='NONE' && has) return false;
-    }
-    const fDraft = document.getElementById('filter-draft').value;
-    if (fDraft !== 'ALL') {
-      const fs = fantasyStats[p.name];
-      if (fDraft==='HAS' && !fs) return false;
-      if (fDraft==='NONE' && fs) return false;
-      if (fDraft==='OVER' && (!fs || fs.avgDelta <= 0)) return false;
-      if (fDraft==='UNDER' && (!fs || fs.avgDelta >= 0)) return false;
-    }
-    return true;
-  });
-
-  // Compute per-player stats
-  const rows = players.map(p => {
-    const days = ['thu','fri','sat'].filter(d => p[d]);
-    const stats = days.map(day => {
-      const fmt = p[day];
-      const entries = getPlayerEntries(p.name, fmt, activeYears);
-      const personalAvg = entries ? r1(avg(entries.map(e=>e.pts))) : null;
-      const poolAvg = getPoolAvg(day, activeYears);
-      return {day, fmt, entries, personalAvg, poolAvg, appearances: entries ? entries.length : 0};
-    });
-    const validPersonal = stats.filter(s => s.personalAvg !== null).map(s => s.personalAvg);
-    const totalAvg = validPersonal.length ? r1(validPersonal.reduce((s,v)=>s+v,0)) : null;
-    return {...p, stats, totalAvg};
-  });
-
-  // Sort
-  rows.sort((a,b) => {
-    if (sortKey==='name') return a.name.localeCompare(b.name)*sortDir;
-    const getVal = r => {
-      if (sortKey==='days') return r.days;
-      if (sortKey==='total') return r.totalAvg ?? -1;
-      if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
-      if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
-      const s = r.stats.find(s=>s.day===sortKey);
-      return s?.personalAvg ?? -1;
-    };
-    return (getVal(b)-getVal(a))*sortDir;
-  });
-
-  if (!rows.length) {
-    document.getElementById('table-wrap').innerHTML = '<div style="color:#555;padding:16px">No players match filters.</div>';
-    return;
-  }
-
-  // Stat cell renderer
-  function statCell(s) {
-    if (!s) return '<td class="fmt-none">—</td>';
-    if (s.personalAvg !== null) {
-      const diff = s.poolAvg !== null ? r1(s.personalAvg - s.poolAvg) : null;
-      const diffCls = diff===null?'':diff>0?'vs-above':diff<0?'vs-below':'';
-      const diffStr = diff===null?'':`<span class="${diffCls}">(${diff>0?'+':''}${diff})</span>`;
-      return `<td><span class="personal">${s.personalAvg}</span> <span class="appear-count">${s.appearances}x</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span> ${diffStr}</td>`;
-    } else {
-      return `<td><span class="no-hist">—</span> <span class="pool-avg">/ ${s.poolAvg??'—'}</span></td>`;
-    }
-  }
-
-  let html = `<table>
-    <thead><tr>
-      <th onclick="toggleSort('name')">Player</th>
-      <th>Thu</th><th>Fri</th><th>Sat</th>
-      <th onclick="toggleSort('days')">Days</th>
-      <th onclick="toggleSort('thu')">Thu Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('fri')">Fri Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('sat')">Sat Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span></th>
-      <th onclick="toggleSort('total')">Total Avg</th>
-      <th onclick="toggleSort('avgPick')">Avg Pick</th>
-      <th onclick="toggleSort('avgDelta')">Slot Delta</th>
-    </tr></thead><tbody>`;
-
-  for (const p of rows) {
-    const thu = p.stats.find(s=>s.day==='thu');
-    const fri = p.stats.find(s=>s.day==='fri');
-    const sat = p.stats.find(s=>s.day==='sat');
-    html += `<tr>
-      <td><button class="name-btn" data-name="${p.name.replace(/"/g,'&quot;')}" onclick="openModal(this.dataset.name)">${p.name}</button>${p.firstNats?'<span class="first-nats">1st</span>':''}</td>
-      <td>${fmtTag(p.thu)}</td><td>${fmtTag(p.fri)}</td><td>${fmtTag(p.sat)}</td>
-      <td class="days-${p.days}">${p.days}</td>
-      ${statCell(thu)}${statCell(fri)}${statCell(sat)}
-      <td class="total-col">${p.totalAvg!==null?p.totalAvg:'<span class="no-hist">—</span>'}</td>
-      ${(()=>{ const fs=fantasyStats[p.name];
-        return fs ? `<td style="color:#888">#${fs.avgPick} <span style="color:#555;font-size:10px">(${fs.appearances}x)</span></td>` : '<td class="no-hist">—</td>';
-      })()}
-      ${(()=>{ const fs=fantasyStats[p.name];
-        if(!fs) return '<td class="no-hist">—</td>';
-        const cls=fs.avgDelta>0?'vs-above':fs.avgDelta<0?'vs-below':'';
-        return `<td class="${cls}">${fs.avgDelta>0?'+':''}${fs.avgDelta}</td>`;
-      })()}
-    </tr>`;
-  }
-
-  html += `</tbody></table>
-    <div class="footer-note">${rows.length} players shown. Format: Personal avg Nx / Pool avg (±diff). Pool avg = all players across both formats that day. Click player name for full profile.</div>`;
-
-  document.getElementById('table-wrap').innerHTML = html;
-}
-
-function toggleSort(key) {
-  if (sortKey===key) sortDir*=-1; else {sortKey=key;sortDir=-1;}
-  document.getElementById('sort-col').value=key;
-  renderTable();
-}
-
-// ── PLAYER MODAL ─────────────────────────────────────────────
-function openModal(name) {
-  const p = PLAYERS.find(x=>x.name===name);
-  if (!p) return;
-
-  document.getElementById('m-name').textContent = name;
-  document.getElementById('m-meta').textContent =
-    `${[p.thu,p.fri,p.sat].filter(Boolean).map(f=>FMT_LABEL[f]||f).join(' · ')} · ${p.days} day${p.days!==1?'s':''}${p.firstNats?' · First Nationals':''}`;
-
-  // NATS HISTORY
-  const activeYears = getActiveYears();
-  const allFmtData = getAllPlayerNatsEntries(name);
-
-  const playerFmts = [p.thu, p.fri, p.sat].filter(Boolean);
-  let natsHtml = '';
-
-  if (allFmtData) {
-    for (const fmt of playerFmts) {
-      // Modal always shows ALL 2022-present data regardless of year toggles
-      const entries = (allFmtData[fmt]||[])
-        .sort((a,b) => b.yr-a.yr || a.day.localeCompare(b.day));
-
-      if (!entries.length) {
-        natsHtml += `<div style="margin-bottom:12px"><strong style="color:#888">${FMT_LABEL[fmt]||fmt}</strong> — <span class="no-hist">No 2022+ data</span></div>`;
-        continue;
-      }
-
-      const personalAvg = r1(avg(entries.map(e=>e.pts)));
-      // Pool avg shown using all years for context
-      const poolAvgAll = getPoolAvg(FMT_TO_DAY[fmt], [2022,2023,2024,2025]);
-
-      natsHtml += `<div style="margin-bottom:14px">
-        <div style="color:#c9a84c;margin-bottom:6px;font-size:12px">
-          ${fmtTag(fmt)} — Avg: <strong>${personalAvg}</strong>
-          ${poolAvgAll!==null?`<span class="pool-avg">/ Pool avg: ${poolAvgAll}</span>`:''}
-          <span class="appear-count">(${entries.length} appearance${entries.length!==1?'s':''})</span>
-        </div>
-        <table class="modal-tbl">
-          <thead><tr><th>Year</th><th class="r">Pts</th><th class="r">Placement</th><th class="r">Field</th><th class="r">%ile</th></tr></thead>
-          <tbody>${entries.map(e => {
-            const pct = Math.round(((e.fieldSize-e.dbPlacement+1)/e.fieldSize)*100);
-            const pctCls = pct>=80?'pct-high':pct>=50?'pct-mid':'pct-low';
-            return `<tr>
-              <td>${e.yr}</td>
-              <td class="r"><strong>${e.pts}</strong></td>
-              <td class="r">#${e.dbPlacement}</td>
-              <td class="r">${e.fieldSize}</td>
-              <td class="r"><span class="${pctCls}">${pct}%</span></td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>
-      </div>`;
-    }
-  } else {
-    natsHtml = '<div class="no-data-msg">No Nationals history found for this player in 2022–present.</div>';
-  }
-
-  document.getElementById('m-nats').innerHTML = natsHtml || '<div class="no-data-msg">No data for registered formats.</div>';
-
-  // FANTASY DRAFT HISTORY
-  let fantHtml = '';
-  const fantEntries = [];
-  for (const [yr, data] of Object.entries(DD)) {
-    for (const team of data.teams) {
-      const pick = team.players.find(pk => namesMatch(pk.name, name));
-      if (!pick) continue;
-      // Compute slot delta: 2-round window
-      const allPicks = data.teams.flatMap(t=>t.players).sort((a,b)=>a.pick-b.pick);
-      const total = allPicks.length;
-      const half = 4;
-      const wStart = Math.max(1, pick.pick-half);
-      const wEnd = Math.min(total, Math.max(wStart+7, pick.pick+half-1));
-      const window = allPicks.filter(pk=>pk.pick>=wStart&&pk.pick<=wEnd&&!namesMatch(pk.name,name));
-      const windowAvg = window.length ? r1(avg(window.map(pk=>pk.pts))) : pick.pts;
-      const delta = r1(pick.pts - windowAvg);
-      // Field percentile
-      const byPts = [...allPicks].sort((a,b)=>b.pts-a.pts);
-      const rank = byPts.findIndex(pk=>namesMatch(pk.name,name))+1;
-      const fieldPct = rank>0?Math.round(((total-rank+1)/total)*100):null;
-      fantEntries.push({yr:parseInt(yr),gm:team.gm,pts:pick.pts,pick:pick.pick,windowAvg,delta,fieldPct,rank,total,champion:data.champion});
-    }
-  }
-
-  if (fantEntries.length) {
-    fantHtml = `<table class="modal-tbl">
-      <thead><tr>
-        <th>Year</th><th>GM</th><th class="c">Pick</th>
-        <th class="r">Pts</th><th class="r">Field %ile</th>
-        <th class="r">Window Avg</th><th class="r">Slot Delta</th>
-      </tr></thead>
-      <tbody>${fantEntries.sort((a,b)=>b.yr-a.yr).map(e=>{
-        const dCls = e.delta>0?'dvs-pos':e.delta<0?'dvs-neg':'dvs-neu';
-        const pctCls = e.fieldPct>=75?'pct-high':e.fieldPct>=40?'pct-mid':'pct-low';
-        return `<tr>
-          <td>${e.yr}${e.champion===e.gm?'<span style="color:#c9a84c;margin-left:4px">★</span>':''}</td>
-          <td>${e.gm}</td>
-          <td class="c">#${e.pick}</td>
-          <td class="r"><strong>${e.pts}</strong></td>
-          <td class="r">${e.fieldPct!==null?`<span class="${pctCls}">${e.fieldPct}%</span>`:'—'}</td>
-          <td class="r">${e.windowAvg}</td>
-          <td class="r"><span class="${dCls}">${e.delta>0?'+':''}${e.delta}</span></td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>
-    <div class="footer-note" style="margin-top:6px">Slot Delta = pts vs avg of picks within 2-round window. Field %ile = rank among all drafted players. ★ = champion's team.</div>`;
-  } else {
-    fantHtml = '<div class="no-data-msg">Never drafted in fantasy.</div>';
-  }
-
-  document.getElementById('m-fantasy').innerHTML = fantHtml;
-  document.getElementById('player-modal').classList.add('open');
-}
-
-function closeModal() {
-  document.getElementById('player-modal').classList.remove('open');
-}
-
-function setStatus(msg) { document.getElementById('status').textContent = msg; }
-
-init();
-</script>
+<header>
+  <img class="logo" src="assets/logo.png" alt="Fantasy Draft">
+  <nav class="tabs">
+    <button class="active" data-tab="scouting">Scouting</button>
+  </nav>
+</header>
+<main>
+  <iframe id="tab-frame" src="scouting.html" title="Scouting"></iframe>
+</main>
 </body>
 </html>
