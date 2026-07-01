@@ -4,13 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fantasy Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    font-family: system-ui, sans-serif;
-    background: #0a0a0a;
-    color: #ddd;
+    font-family: 'Oswald', system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse 900px 500px at 12% -10%, rgba(255,52,80,0.14), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(218,179,94,0.10), transparent 55%),
+      #08080a;
+    color: #eaeaef;
     display: flex;
     flex-direction: column;
   }
@@ -18,14 +24,19 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 16px 0;
-    background: #0a0a0a;
-    border-bottom: 2px solid #c9202f;
+    padding: 24px 16px 0;
+    border-bottom: 1px solid #26262e;
+    position: relative;
+  }
+  header::after {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+    background: linear-gradient(90deg, #ff3450, #dab35e 50%, #ff3450);
   }
   .logo {
     height: 110px;
     width: auto;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
   }
   nav.tabs {
     display: flex;
@@ -35,33 +46,35 @@
     justify-content: center;
   }
   nav.tabs button {
-    background: #141414;
-    border: 1px solid #333;
+    background: #131317;
+    border: 1px solid #26262e;
     border-bottom: none;
-    color: #999;
-    font-family: monospace;
-    font-size: 13px;
+    color: #8b8b98;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 10px 20px;
+    letter-spacing: 1.5px;
+    padding: 11px 22px;
     cursor: pointer;
-    border-radius: 6px 6px 0 0;
+    border-radius: 8px 8px 0 0;
+    transition: color .15s, border-color .15s;
   }
   nav.tabs button.active {
-    background: #1a1a1a;
-    color: #c9a84c;
-    border-color: #c9a84c;
+    background: #1a1a20;
+    color: #f0d391;
+    border-color: #dab35e;
   }
   nav.tabs button:disabled {
-    color: #444;
+    color: #4d4d58;
     cursor: default;
   }
   nav.tabs button:not(:disabled):not(.active):hover {
-    color: #ddd;
+    color: #eaeaef;
   }
   main {
     flex: 1;
-    background: #1a1a1a;
+    background: #131317;
   }
   iframe {
     width: 100%;
