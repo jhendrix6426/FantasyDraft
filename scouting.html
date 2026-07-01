@@ -227,7 +227,6 @@ tbody tr:hover { border-left: 2px solid var(--red); }
   <label><input type="checkbox" id="yr-2023" checked onchange="renderTable()"> 2023</label>
   <label><input type="checkbox" id="yr-2024" checked onchange="renderTable()"> 2024</label>
   <label><input type="checkbox" id="yr-2025" checked onchange="renderTable()"> 2025</label>
-  <span class="year-note">(Teams uses 2023+ only regardless of selection)</span>
 </div>
 
 <div class="filters">
@@ -470,8 +469,6 @@ function processNats(db) {
     if (yr < 2022) continue;
     const fmt = FMT_MAP[key.split('_').slice(1).join('_')];
     if (!fmt) continue;
-    // Teams: use 2023+ only
-    if (fmt === 'Teams' && yr < 2023) continue;
     const day = FMT_TO_DAY[fmt];
     if (!day) continue;
 
@@ -505,7 +502,6 @@ function processMatches(db) {
     if (yr < 2022) continue;
     const fmt = FMT_MAP[key.split('_').slice(1).join('_')];
     if (!fmt) continue;
-    if (fmt === 'Teams' && yr < 2023) continue;
 
     for (const m of matchList) {
       if (!m.playerA || !m.playerB || !m.winner) continue;
