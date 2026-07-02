@@ -237,7 +237,7 @@ tbody tr:hover { border-left: 2px solid var(--red); }
   <div class="filter-group"><label>Saturday</label><select id="filter-sat" onchange="renderTable()"><option value="ANY">Any</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="NONE">Not Playing</option></select></div>
   <div class="filter-group"><label>Any Format</label><select id="filter-fmt" onchange="renderTable()"><option value="ALL">All</option><option value="T1">Type 1</option><option value="T2">Type 2</option><option value="BD">Booster</option><option value="SD">Sealed</option><option value="Teams">Teams</option><option value="TA">Type A</option></select></div>
   <div class="filter-group"><label>History</label><select id="filter-hist" onchange="renderTable()"><option value="ALL">All Players</option><option value="HAS">Has History</option><option value="NONE">No History</option></select></div>
-  <div class="filter-group"><label>Sort</label><select id="sort-col" onchange="renderTable()"><option value="total" selected>Total Avg</option><option value="name">Name</option><option value="days">Days</option><option value="thu">Thu Avg</option><option value="fri">Fri Avg</option><option value="sat">Sat Avg</option><option value="winpct">Win%</option><option value="avgPick">Avg Draft Position</option><option value="avgDelta">Slot Delta</option><option value="score">Draft Score</option></select></div>
+  <div class="filter-group"><label>Sort</label><select id="sort-col" onchange="renderTable()"><option value="total" selected>Total Avg</option><option value="name">Name</option><option value="days">Days</option><option value="thu">Thu Avg</option><option value="thuTotal">Thu Total</option><option value="fri">Fri Avg</option><option value="friTotal">Fri Total</option><option value="sat">Sat Avg</option><option value="satTotal">Sat Total</option><option value="totalPts">Total Pts</option><option value="avgPtsYr">Avg Pts/Yr</option><option value="winpct">Win%</option><option value="avgPick">Avg Draft Position</option><option value="avgDelta">Slot Delta</option><option value="score">Draft Score</option></select></div>
   <div class="filter-group"><label>Draft History</label><select id="filter-draft" onchange="renderTable()"><option value="ALL">All</option><option value="HAS">Has Draft History</option><option value="NONE">Never Drafted</option><option value="OVER">Outperformed Slot</option><option value="UNDER">Underperformed Slot</option></select></div>
 </div>
 
@@ -599,6 +599,11 @@ function statCell(s) {
   }
 }
 
+function totalCell(s) {
+  if (!s || s.total === null) return '<td class="fmt-none">—</td>';
+  return `<td><span class="personal">${s.total}</span> <span class="appear-count">${s.appearances}x</span></td>`;
+}
+
 // ── CUSTOMIZABLE COLUMNS ─────────────────────────────────────
 const COLUMN_DEFS = [
   {id:'player', label:'Player', sortKey:'name', required:true,
@@ -608,9 +613,14 @@ const COLUMN_DEFS = [
   {id:'satFmt', label:'Sat', render:p=>`<td>${fmtTag(p.sat)}</td>`},
   {id:'days', label:'Days', sortKey:'days', render:p=>`<td class="days-${p.days}">${p.days}</td>`},
   {id:'thuAvg', label:'Thu Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'thu', render:p=>statCell(p.stats.find(s=>s.day==='thu'))},
+  {id:'thuTotal', label:'Thu Total', sortKey:'thuTotal', render:p=>totalCell(p.stats.find(s=>s.day==='thu'))},
   {id:'friAvg', label:'Fri Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'fri', render:p=>statCell(p.stats.find(s=>s.day==='fri'))},
+  {id:'friTotal', label:'Fri Total', sortKey:'friTotal', render:p=>totalCell(p.stats.find(s=>s.day==='fri'))},
   {id:'satAvg', label:'Sat Avg / Pool <span style="color:#555;font-weight:normal">(diff)</span>', sortKey:'sat', render:p=>statCell(p.stats.find(s=>s.day==='sat'))},
+  {id:'satTotal', label:'Sat Total', sortKey:'satTotal', render:p=>totalCell(p.stats.find(s=>s.day==='sat'))},
   {id:'totalAvg', label:'Total Avg', sortKey:'total', render:p=>`<td class="total-col">${p.totalAvg!==null?p.totalAvg:'<span class="no-hist">—</span>'}</td>`},
+  {id:'totalPts', label:'Total Pts', sortKey:'totalPts', render:p=>`<td class="total-col">${p.totalPts!==null?p.totalPts:'<span class="no-hist">—</span>'}</td>`},
+  {id:'avgPtsYr', label:'Avg Pts/Yr', sortKey:'avgPtsYr', render:p=>`<td>${p.avgPtsYr!==null?p.avgPtsYr:'<span class="no-hist">—</span>'}</td>`},
   {id:'winPct', label:'Win%', sortKey:'winpct', render:p=> p.winStats ? `<td>${p.winStats.wins}-${p.winStats.losses} <span class="pool-avg">(${p.winStats.pct}%)</span></td>` : '<td class="no-hist">—</td>'},
   {id:'avgPick', label:'Avg Pick', sortKey:'avgPick', render:p=>{
     const fs=fantasyStats[p.name];
@@ -754,13 +764,19 @@ function renderTable() {
       const fmt = p[day];
       const entries = getPlayerEntries(p.name, fmt, activeYears);
       const personalAvg = entries ? r1(avg(entries.map(e=>e.pts))) : null;
+      const total = entries ? r1(entries.reduce((s,e)=>s+e.pts,0)) : null;
       const poolAvg = getPoolAvg(day, activeYears);
-      return {day, fmt, entries, personalAvg, poolAvg, appearances: entries ? entries.length : 0};
+      return {day, fmt, entries, personalAvg, total, poolAvg, appearances: entries ? entries.length : 0};
     });
     const validPersonal = stats.filter(s => s.personalAvg !== null).map(s => s.personalAvg);
     const totalAvg = validPersonal.length ? r1(validPersonal.reduce((s,v)=>s+v,0)) : null;
+    const validTotals = stats.filter(s => s.total !== null);
+    const totalPts = validTotals.length ? r1(validTotals.reduce((s,v)=>s+v.total,0)) : null;
+    const yearsPlayed = new Set();
+    for (const s of stats) if (s.entries) for (const e of s.entries) yearsPlayed.add(e.yr);
+    const avgPtsYr = yearsPlayed.size ? r1(totalPts/yearsPlayed.size) : null;
     const winStats = getWinStats(p, activeYears);
-    return {...p, stats, totalAvg, winStats};
+    return {...p, stats, totalAvg, totalPts, avgPtsYr, winStats};
   });
 
   computeScores(rows);
@@ -771,6 +787,12 @@ function renderTable() {
     const getVal = r => {
       if (sortKey==='days') return r.days;
       if (sortKey==='total') return r.totalAvg ?? -1;
+      if (sortKey==='totalPts') return r.totalPts ?? -1;
+      if (sortKey==='avgPtsYr') return r.avgPtsYr ?? -1;
+      if (sortKey==='thuTotal'||sortKey==='friTotal'||sortKey==='satTotal') {
+        const s = r.stats.find(s=>s.day===sortKey.slice(0,3));
+        return s?.total ?? -1;
+      }
       if (sortKey==='winpct') return r.winStats?.pct ?? -1;
       if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
       if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
@@ -778,7 +800,7 @@ function renderTable() {
       const s = r.stats.find(s=>s.day===sortKey);
       return s?.personalAvg ?? -1;
     };
-    return (getVal(b)-getVal(a))*sortDir;
+    return (getVal(a)-getVal(b))*sortDir;
   });
 
   if (!rows.length) {
