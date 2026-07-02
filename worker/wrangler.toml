@@ -1,0 +1,7 @@
+name = "fantasy-draft"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "FANTASY_DB"
+id = "7ccdd940dd624ff18ec2d296b5a360c4"
