@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Draft Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --red: #ff3450;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 1200px 700px at 10% -10%, rgba(255,52,80,0.16), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 100% 0%, rgba(218,179,94,0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 22px 28px;
+}
+
+/* HEADER STRIP */
+.strip {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--border); margin-bottom: 18px;
+}
+.strip-left { font-family: 'Oswald', sans-serif; font-weight: 600; color: var(--text-dim); font-size: 18px; letter-spacing: 1px; text-transform: uppercase; }
+.strip-left b { color: var(--gold-bright); }
+.clock-wrap { text-align: center; flex: 1; }
+.on-clock {
+  font-family: 'Oswald', sans-serif; font-weight: 800; text-transform: uppercase;
+  font-size: 40px; letter-spacing: 1px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .72; } }
+.on-deck { font-size: 13px; color: var(--text-mute); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+.on-deck b { color: var(--text-dim); }
+
+/* BOARD */
+.board-wrap { flex: 1; overflow: hidden; display: flex; }
+.board { flex: 1; display: grid; gap: 8px; overflow: hidden; }
+.gm-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gm-header {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; font-size: 15px; text-align: center; padding: 10px 6px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gm-col.active .gm-header {
+  color: var(--gold-bright); border-color: var(--red);
+  box-shadow: 0 0 16px rgba(255,52,80,0.35);
+}
+.slot {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; min-height: 40px; display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden;
+}
+.slot.filled { border-color: #33333d; }
+.slot .num { color: var(--text-mute); font-size: 9px; letter-spacing: 1px; }
+.slot .name { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot.empty .name { color: var(--text-mute); }
+.slot.current { border-color: var(--red); box-shadow: 0 0 12px rgba(255,52,80,0.3); }
+
+/* PICK REVEAL OVERLAY */
+.reveal-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 50;
+}
+.reveal-card {
+  background: linear-gradient(135deg, var(--panel-2), var(--panel));
+  border: 2px solid var(--gold); border-radius: 16px; padding: 40px 64px;
+  text-align: center; box-shadow: 0 0 60px rgba(218,179,94,0.4), 0 0 120px rgba(255,52,80,0.2);
+  transform: scale(0.7); opacity: 0; transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .25s;
+}
+.reveal-card.show { transform: scale(1); opacity: 1; }
+.reveal-pick { color: var(--text-mute); font-size: 14px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 10px; }
+.reveal-name {
+  font-family: 'Oswald', sans-serif; font-weight: 800; text-transform: uppercase; font-size: 52px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 8px;
+}
+.reveal-gm { color: var(--text-dim); font-size: 16px; letter-spacing: 1px; text-transform: uppercase; }
+
+/* COMPLETE STATE */
+.complete-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.complete-title { font-family: 'Oswald', sans-serif; font-weight: 800; font-size: 56px; text-transform: uppercase; letter-spacing: 2px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 12px; }
+.complete-sub { color: var(--text-dim); font-size: 16px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+  <div class="strip">
+    <div class="strip-left" id="strip-left">Fantasy Draft</div>
+    <div class="clock-wrap">
+      <div class="on-clock" id="on-clock">Loading...</div>
+      <div class="on-deck" id="on-deck"></div>
+    </div>
+    <div class="strip-left" id="strip-right"></div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+  <div class="reveal-overlay"><div class="reveal-card" id="reveal-card"></div></div>
+
+<script>
+const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+const params = new URLSearchParams(location.search);
+const YEAR = parseInt(params.get('year')) || 2026;
+
+let gms = [];               // [{id,name}]
+let lastPickCount = 0;
+let animQueue = [];
+let playingAnim = false;
+let firstLoad = true;
+
+function gmName(id) {
+  const g = gms.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+async function fetchJson(path) {
+  const res = await fetch(API_BASE + path);
+  return res.json();
+}
+
+async function poll() {
+  try {
+    const ld = await fetchJson(`/fantasy/livedraft/${YEAR}`);
+    handleUpdate(ld);
+  } catch (e) {
+    document.getElementById('on-clock').textContent = 'Connection lost — retrying...';
+  }
+}
+
+let latestLd = null;
+
+function handleUpdate(ld) {
+  if (ld.status === 'pre' || !ld.draftOrder || !ld.draftOrder.length) {
+    document.getElementById('strip-left').textContent = `${YEAR} Fantasy Draft`;
+    document.getElementById('on-clock').textContent = 'Waiting for the draft to start...';
+    document.getElementById('on-deck').textContent = '';
+    ensureBoardEl().innerHTML = '';
+    lastPickCount = 0;
+    latestLd = null;
+    return;
+  }
+
+  // Queue reveal animations for any newly-seen picks (skip on first load —
+  // don't replay the whole draft history if the page is opened mid-draft).
+  if (!firstLoad && ld.picks.length > lastPickCount) {
+    for (let i = lastPickCount; i < ld.picks.length; i++) animQueue.push(ld.picks[i]);
+  }
+  lastPickCount = ld.picks.length;
+  firstLoad = false;
+  latestLd = ld;
+
+  renderAll(ld);
+  processQueue();
+}
+
+// True once the draft is done AND every pick's reveal has played —
+// used to hold off the "Draft Complete" screen until the last reveal finishes,
+// so it never gets swapped in over/under a still-animating reveal card.
+function isFullyRevealed(ld) {
+  return ld.isComplete && animQueue.length === 0 && !playingAnim;
+}
+
+function renderAll(ld) {
+  renderStrip(ld);
+  renderBoard(ld);
+}
+
+function renderStrip(ld) {
+  const done = isFullyRevealed(ld);
+  document.getElementById('strip-left').textContent = `${ld.year} · ${ld.picks.length} picks`;
+  document.getElementById('strip-right').textContent = ld.status === 'paused' ? 'PAUSED' : '';
+  if (done) {
+    document.getElementById('on-clock').textContent = 'Draft Complete';
+    document.getElementById('on-deck').textContent = '';
+  } else if (ld.isComplete) {
+    document.getElementById('on-clock').textContent = 'Final pick incoming...';
+    document.getElementById('on-deck').textContent = '';
+  } else {
+    document.getElementById('on-clock').textContent = `On the Clock: ${gmName(ld.onTheClock)}`;
+    document.getElementById('on-deck').innerHTML = ld.onDeck && ld.onDeck.length
+      ? `Round ${ld.round} · Pick ${ld.pickNumber} &nbsp;·&nbsp; On deck: <b>${ld.onDeck.map(gmName).join(', ')}</b>`
+      : `Round ${ld.round} · Pick ${ld.pickNumber}`;
+  }
+}
+
+function ensureBoardEl() {
+  const wrap = document.getElementById('board-wrap');
+  let board = document.getElementById('board');
+  if (!board) {
+    wrap.innerHTML = '<div class="board" id="board"></div>';
+    board = document.getElementById('board');
+  }
+  return board;
+}
+
+function renderBoard(ld) {
+  const wrap = document.getElementById('board-wrap');
+
+  if (isFullyRevealed(ld)) {
+    wrap.innerHTML = `
+      <div class="complete-screen">
+        <div class="complete-title">Draft Complete</div>
+        <div class="complete-sub">${ld.picks.length} picks across ${ld.draftOrder.length} GMs</div>
+      </div>`;
+    return;
+  }
+
+  const board = ensureBoardEl();
+  const n = ld.draftOrder.length;
+  board.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+
+  const picksByGm = {};
+  ld.draftOrder.forEach(id => picksByGm[id] = []);
+  ld.picks.forEach(p => { if (picksByGm[p.gm]) picksByGm[p.gm].push(p); });
+
+  board.innerHTML = ld.draftOrder.map(gmId => {
+    const isActive = !ld.isComplete && gmId === ld.onTheClock;
+    const rows = [];
+    for (let r = 0; r < ld.rosterSize; r++) {
+      const pick = picksByGm[gmId][r];
+      const isCurrentSlot = isActive && r === picksByGm[gmId].length;
+      if (pick) {
+        rows.push(`<div class="slot filled"><div class="num">PICK ${pick.pickNumber}</div><div class="name">${pick.player}</div></div>`);
+      } else {
+        rows.push(`<div class="slot empty ${isCurrentSlot ? 'current' : ''}"><div class="num">ROUND ${r+1}</div><div class="name">—</div></div>`);
+      }
+    }
+    return `<div class="gm-col ${isActive ? 'active' : ''}"><div class="gm-header">${gmName(gmId)}</div>${rows.join('')}</div>`;
+  }).join('');
+}
+
+function processQueue() {
+  if (playingAnim || !animQueue.length) return;
+  playingAnim = true;
+  const pick = animQueue.shift();
+  const card = document.getElementById('reveal-card');
+  card.innerHTML = `
+    <div class="reveal-pick">Pick ${pick.pickNumber} · Round ${pick.round}</div>
+    <div class="reveal-name">${pick.player}</div>
+    <div class="reveal-gm">${gmName(pick.gm)}</div>
+  `;
+  requestAnimationFrame(() => card.classList.add('show'));
+  setTimeout(() => {
+    card.classList.remove('show');
+    setTimeout(() => {
+      playingAnim = false;
+      if (animQueue.length) processQueue();
+      else if (latestLd) renderAll(latestLd); // re-check: may now be fully revealed
+    }, 350);
+  }, 3200);
+}
+
+async function init() {
+  try { gms = await fetchJson('/fantasy/gms'); } catch (e) { gms = []; }
+  poll();
+  setInterval(poll, 2000);
+}
+init();
+</script>
+</body>
+</html>

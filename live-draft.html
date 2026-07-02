@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Draft — Fantasy Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --border-soft: #1c1c22;
+  --red: #ff3450;
+  --red-dim: #7a1424;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+  --cyan: #3ec7ff;
+  --green: #35d488;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scrollbar-color: var(--border) var(--bg); }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 900px 500px at 12% -10%, rgba(255,52,80,0.14), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(218,179,94,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+.page { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: 28px 4px 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 3px; color: var(--red);
+  background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
+  padding: 4px 10px; border-radius: 100px; margin-bottom: 10px;
+}
+.hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+h1 {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; font-size: 28px; line-height: 1.1; margin-bottom: 8px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.status {
+  display: inline-block; color: var(--text-dim); font-size: 11px;
+  padding: 5px 12px; background: var(--panel); border: 1px solid var(--border-soft);
+  border-radius: 100px;
+}
+
+.card {
+  background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--gold) 50%, var(--red));
+}
+.card-title {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 14px;
+}
+
+label { display: block; color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Oswald', sans-serif; font-weight: 500; margin-bottom: 5px; }
+select, input[type=text], input[type=password], input[type=number], textarea {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 11px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  width: 100%; border-radius: 6px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+textarea { resize: vertical; min-height: 90px; }
+select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,52,80,0.15); }
+.field { margin-bottom: 14px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 160px; }
+
+button.btn {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1px; padding: 10px 18px;
+  border-radius: 100px; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+button.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+button.btn:disabled { opacity: .4; cursor: default; }
+button.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+button.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+button.btn-sm { padding: 6px 12px; font-size: 10px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
+.hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+
+.landing-choice { display: flex; gap: 14px; flex-wrap: wrap; }
+.landing-choice button { flex: 1; min-width: 200px; padding: 24px; }
+
+.clock-banner {
+  border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+  font-family: 'Oswald', sans-serif; text-align: center;
+  border: 1px solid var(--border-soft); background: var(--panel);
+}
+.clock-banner.mine {
+  background: linear-gradient(120deg, rgba(255,52,80,0.18), var(--panel-2));
+  border-color: var(--red); box-shadow: 0 0 24px rgba(255,52,80,0.15);
+}
+.clock-banner .who { font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gold-bright); }
+.clock-banner .meta { color: var(--text-dim); font-size: 11px; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+.player-list { max-height: 420px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; }
+.player-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border-soft);
+}
+.player-row:last-child { border-bottom: none; }
+.player-row:nth-child(even) { background: rgba(255,255,255,0.012); }
+.player-name { font-weight: 600; }
+.player-fmts { color: var(--text-mute); font-size: 10px; }
+
+.feed { max-height: 320px; overflow-y: auto; }
+.feed-item {
+  display: flex; justify-content: space-between; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft); font-size: 12px;
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-pick { color: var(--gold-bright); }
+.feed-gm { color: var(--text-dim); }
+
+.gm-editor-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.gm-editor-row input { flex: 1; }
+.token-link { font-size: 10px; color: var(--cyan); word-break: break-all; margin-top: 4px; }
+
+.roster-order-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 4px;
+  background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 6px; font-size: 12px;
+}
+.roster-order-item .pos { color: var(--gold); font-weight: 700; width: 20px; }
+
+.logout-link { color: var(--text-mute); font-size: 11px; cursor: pointer; text-decoration: underline; }
+.logout-link:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="hero-tag">Live Draft</div>
+    <h1 id="page-title">Fantasy Draft — Live</h1>
+    <div class="status" id="status">Loading...</div>
+  </header>
+
+  <div id="app"></div>
+</div>
+
+<script>
+const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+
+const params = new URLSearchParams(location.search);
+const state = {
+  year: parseInt(params.get('year')) || 2026,
+  role: null,           // 'gm' | 'commish'
+  gmId: null, gmToken: null, gmName: null,
+  commishKey: null,
+  livedraft: null,      // last fetched /fantasy/livedraft/:year response
+  gmsPublic: [],        // [{id,name,active}]
+  pollTimer: null,
+  submitting: false,
+  error: null,
+};
+
+// ── API helpers ──────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+const publicGet = (path) => apiFetch(path, { method: 'GET' });
+const commishFetch = (path, method, body) => apiFetch(path, {
+  method, headers: { 'Content-Type': 'application/json', 'X-Commish-Key': state.commishKey },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+});
+const gmFetch = (path, method, body) => apiFetch(path, {
+  method, headers: { 'Content-Type': 'application/json', 'X-GM-Token': state.gmToken },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+});
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// ── Session persistence ──────────────────────────────────────
+function saveGmSession() {
+  localStorage.setItem('livedraft-gm', JSON.stringify({ gmId: state.gmId, gmToken: state.gmToken, gmName: state.gmName, year: state.year }));
+}
+function saveCommishSession() {
+  localStorage.setItem('livedraft-commish', JSON.stringify({ commishKey: state.commishKey, year: state.year }));
+}
+function clearSession() {
+  localStorage.removeItem('livedraft-gm');
+  localStorage.removeItem('livedraft-commish');
+  location.reload();
+}
+
+// ── Polling ───────────────────────────────────────────────────
+async function fetchLivedraft() {
+  try {
+    state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`);
+    state.error = null;
+  } catch (e) {
+    state.error = 'Could not reach the draft server: ' + e.message;
+  }
+  render();
+}
+
+function startPolling() {
+  stopPolling();
+  fetchLivedraft();
+  state.pollTimer = setInterval(fetchLivedraft, 3000);
+}
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopPolling();
+  else if (state.role) startPolling();
+});
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  setStatus('Connecting...');
+  try {
+    state.gmsPublic = await publicGet('/fantasy/gms');
+  } catch (e) {
+    state.gmsPublic = [];
+  }
+
+  // Pre-filled GM link: ?gm=id&token=xxx
+  const linkGm = params.get('gm'), linkToken = params.get('token');
+  if (linkGm && linkToken) {
+    try {
+      const v = await apiFetch('/fantasy/gms/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ gmId: linkGm, token: linkToken }) });
+      state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = linkToken;
+      saveGmSession();
+      setStatus(`Logged in as ${state.gmName}`);
+      startPolling();
+      return;
+    } catch (e) { /* fall through to normal login */ }
+  }
+
+  const savedGm = JSON.parse(localStorage.getItem('livedraft-gm') || 'null');
+  if (savedGm && savedGm.year === state.year) {
+    state.role = 'gm'; state.gmId = savedGm.gmId; state.gmToken = savedGm.gmToken; state.gmName = savedGm.gmName;
+    setStatus(`Logged in as ${state.gmName}`);
+    startPolling();
+    return;
+  }
+
+  const savedCommish = JSON.parse(localStorage.getItem('livedraft-commish') || 'null');
+  if (savedCommish && savedCommish.year === state.year) {
+    state.role = 'commish'; state.commishKey = savedCommish.commishKey;
+    setStatus('Logged in as Commissioner');
+    startPolling();
+    return;
+  }
+
+  setStatus('Choose your role to continue');
+  render();
+}
+
+// ── Login actions ────────────────────────────────────────────
+async function loginAsGm() {
+  const gmId = document.getElementById('gm-select').value;
+  const token = document.getElementById('gm-token').value.trim();
+  const errEl = document.getElementById('gm-login-error');
+  errEl.textContent = '';
+  if (!gmId || !token) { errEl.textContent = 'Pick your name and enter your token.'; return; }
+  try {
+    const v = await apiFetch('/fantasy/gms/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ gmId, token }) });
+    state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = token;
+    saveGmSession();
+    setStatus(`Logged in as ${state.gmName}`);
+    startPolling();
+  } catch (e) {
+    errEl.textContent = 'That token doesn\'t match — check with the commissioner.';
+  }
+}
+
+async function loginAsCommish() {
+  const key = document.getElementById('commish-key').value;
+  const errEl = document.getElementById('commish-login-error');
+  errEl.textContent = '';
+  state.commishKey = key;
+  try {
+    await commishFetch(`/fantasy/gms?full=1`, 'GET'); // validates the key
+    state.role = 'commish';
+    saveCommishSession();
+    setStatus('Logged in as Commissioner');
+    startPolling();
+  } catch (e) {
+    state.commishKey = null;
+    errEl.textContent = 'Incorrect passphrase.';
+    render();
+  }
+}
+
+// ── GM actions ────────────────────────────────────────────────
+async function submitPick(playerName) {
+  if (state.submitting) return;
+  state.submitting = true; render();
+  const pickRequestId = crypto.randomUUID();
+  try {
+    await gmFetch(`/fantasy/livedraft/${state.year}/pick`, 'POST', { gmId: state.gmId, player: playerName, pickRequestId });
+  } catch (e) {
+    state.error = e.message;
+  }
+  state.submitting = false;
+  await fetchLivedraft();
+}
+
+// ── Commissioner actions ──────────────────────────────────────
+let commishGmRows = null; // working copy of full GM list (with tokens) while editing
+
+async function loadGmEditor() {
+  try {
+    commishGmRows = await commishFetch('/fantasy/gms?full=1', 'GET');
+  } catch (e) { commishGmRows = []; }
+  render();
+}
+
+function addGmRow() {
+  if (!commishGmRows) commishGmRows = [];
+  commishGmRows.push({ id: '', name: '', token: crypto.randomUUID().replace(/-/g,'').slice(0,16), active: true });
+  render();
+}
+function removeGmRow(idx) {
+  commishGmRows.splice(idx, 1);
+  render();
+}
+async function saveGmRows() {
+  const errEl = document.getElementById('gm-editor-error');
+  const rows = commishGmRows.map((r, i) => ({
+    id: (document.getElementById('gm-id-'+i).value || '').trim(),
+    name: (document.getElementById('gm-name-'+i).value || '').trim(),
+    token: r.token,
+    active: true,
+  }));
+  if (rows.some(r => !r.id || !r.name)) { errEl.textContent = 'Every GM needs both an id and a name.'; return; }
+  try {
+    await commishFetch('/fantasy/gms', 'PUT', rows);
+    commishGmRows = rows;
+    state.gmsPublic = await publicGet('/fantasy/gms');
+    errEl.textContent = '';
+    render();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+async function savePlayerPool() {
+  const errEl = document.getElementById('pool-error');
+  const year = document.getElementById('pool-year').value.trim() || state.year;
+  let list;
+  try { list = JSON.parse(document.getElementById('pool-json').value); }
+  catch (e) { errEl.textContent = 'That\'s not valid JSON.'; return; }
+  if (!Array.isArray(list)) { errEl.textContent = 'Player pool must be a JSON array.'; return; }
+  try {
+    await commishFetch(`/fantasy/players/${year}`, 'PUT', list);
+    errEl.textContent = `Saved ${list.length} players for ${year}.`;
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+let draftOrderRows = null; // working array of GM ids for the draft order builder
+
+async function startDraft() {
+  const errEl = document.getElementById('start-error');
+  const rosterSize = parseInt(document.getElementById('roster-size').value);
+  const playerPoolYear = document.getElementById('pool-year-start').value.trim() || state.year;
+  if (!draftOrderRows || !draftOrderRows.length) { errEl.textContent = 'Add at least one GM to the draft order.'; return; }
+  if (!rosterSize || rosterSize < 1) { errEl.textContent = 'Roster size must be a positive number.'; return; }
+  try {
+    await commishFetch(`/fantasy/livedraft/${state.year}/start`, 'POST', { draftOrder: draftOrderRows, rosterSize, playerPoolYear });
+    errEl.textContent = '';
+    await fetchLivedraft();
+  } catch (e) { errEl.textContent = e.message; }
+}
+async function pauseDraft() { await commishFetch(`/fantasy/livedraft/${state.year}/pause`, 'POST'); await fetchLivedraft(); }
+async function resumeDraft() { await commishFetch(`/fantasy/livedraft/${state.year}/resume`, 'POST'); await fetchLivedraft(); }
+async function undoPick() {
+  if (!confirm('Undo the most recent pick?')) return;
+  await commishFetch(`/fantasy/livedraft/${state.year}/undo`, 'POST'); await fetchLivedraft();
+}
+
+function addToDraftOrder(gmId) {
+  if (!draftOrderRows) draftOrderRows = [];
+  if (!draftOrderRows.includes(gmId)) draftOrderRows.push(gmId);
+  render();
+}
+function removeFromDraftOrder(idx) { draftOrderRows.splice(idx, 1); render(); }
+function moveDraftOrder(idx, dir) {
+  const j = idx + dir;
+  if (j < 0 || j >= draftOrderRows.length) return;
+  [draftOrderRows[idx], draftOrderRows[j]] = [draftOrderRows[j], draftOrderRows[idx]];
+  render();
+}
+
+// ── Render ────────────────────────────────────────────────────
+function gmName(id) {
+  const g = state.gmsPublic.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (!state.role) { app.innerHTML = renderLanding(); attachLandingHandlers(); return; }
+  if (state.role === 'gm') { app.innerHTML = renderGmView(); attachGmHandlers(); return; }
+  if (state.role === 'commish') { app.innerHTML = renderCommishView(); attachCommishHandlers(); return; }
+}
+
+function renderLanding() {
+  return `
+    <div class="landing-choice">
+      <button class="btn" id="choose-gm">I'm a GM</button>
+      <button class="btn" id="choose-commish">I'm the Commissioner</button>
+    </div>
+    <div id="login-forms"></div>
+  `;
+}
+function attachLandingHandlers() {
+  document.getElementById('choose-gm').onclick = () => {
+    document.getElementById('login-forms').innerHTML = `
+      <div class="card">
+        <div class="card-title">GM Login</div>
+        <div class="field"><label>Your Name</label>
+          <select id="gm-select">
+            <option value="">Select...</option>
+            ${state.gmsPublic.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
+        <button class="btn btn-primary" id="gm-login-btn">Log In</button>
+        <div class="error-msg" id="gm-login-error"></div>
+      </div>`;
+    document.getElementById('gm-login-btn').onclick = loginAsGm;
+  };
+  document.getElementById('choose-commish').onclick = () => {
+    document.getElementById('login-forms').innerHTML = `
+      <div class="card">
+        <div class="card-title">Commissioner Login</div>
+        <div class="field"><label>Passphrase</label><input type="password" id="commish-key"></div>
+        <button class="btn btn-primary" id="commish-login-btn">Log In</button>
+        <div class="error-msg" id="commish-login-error"></div>
+      </div>`;
+    document.getElementById('commish-login-btn').onclick = loginAsCommish;
+  };
+}
+
+function renderGmView() {
+  const ld = state.livedraft;
+  if (!ld || ld.status === 'pre') {
+    return `<div class="card"><div class="card-title">Waiting</div>The commissioner hasn't started the draft yet. This page will update automatically.</div>` + renderLogout();
+  }
+  const isMine = ld.onTheClock === state.gmId;
+  const picked = new Set(ld.picks.map(p => p.player));
+  const available = (ld.playerPool || []).filter(p => !picked.has(p.name));
+  const myRoster = ld.picks.filter(p => p.gm === state.gmId);
+
+  const clockHtml = ld.isComplete
+    ? `<div class="clock-banner"><div class="who">Draft Complete</div></div>`
+    : `<div class="clock-banner ${isMine ? 'mine' : ''}">
+        <div class="who">${isMine ? "You're on the clock!" : `On the clock: ${gmName(ld.onTheClock)}`}</div>
+        <div class="meta">Round ${ld.round} · Pick ${ld.pickNumber} ${ld.status === 'paused' ? '· PAUSED' : ''}</div>
+      </div>`;
+
+  const playersHtml = (!ld.isComplete && isMine) ? `
+    <div class="card">
+      <div class="card-title">Available Players (${available.length})</div>
+      <div class="field"><input type="text" id="player-search" placeholder="Search players..."></div>
+      <div class="player-list" id="player-list">${renderPlayerRows(available)}</div>
+    </div>` : '';
+
+  return `
+    ${clockHtml}
+    ${playersHtml}
+    <div class="card">
+      <div class="card-title">Your Roster (${myRoster.length}/${ld.rosterSize})</div>
+      ${myRoster.length ? myRoster.map(p => `<div class="feed-item"><span class="feed-pick">${p.player}</span><span class="feed-gm">Pick ${p.pickNumber}</span></div>`).join('') : '<div class="hint">No picks yet.</div>'}
+    </div>
+    <div class="card">
+      <div class="card-title">Pick Feed</div>
+      <div class="feed">${renderFeed(ld.picks)}</div>
+    </div>
+    ${state.error ? `<div class="error-msg">${state.error}</div>` : ''}
+    ${renderLogout()}
+  `;
+}
+
+function renderPlayerRows(list, filter) {
+  const f = (filter || '').toLowerCase();
+  const filtered = f ? list.filter(p => p.name.toLowerCase().includes(f)) : list;
+  if (!filtered.length) return '<div class="hint" style="padding:14px">No players match.</div>';
+  return filtered.map(p => `
+    <div class="player-row">
+      <div><div class="player-name">${p.name}</div><div class="player-fmts">${[p.thu,p.fri,p.sat].filter(Boolean).join(' · ') || ''}</div></div>
+      <button class="btn btn-sm btn-primary draft-btn" data-name="${p.name.replace(/"/g,'&quot;')}" ${state.submitting ? 'disabled' : ''}>Draft</button>
+    </div>`).join('');
+}
+
+function renderFeed(picks) {
+  if (!picks.length) return '<div class="hint">No picks yet.</div>';
+  return [...picks].reverse().map(p => `
+    <div class="feed-item"><span class="feed-pick">#${p.pickNumber} ${p.player}</span><span class="feed-gm">${gmName(p.gm)}</span></div>
+  `).join('');
+}
+
+function renderLogout() {
+  return `<div style="margin-top:16px"><span class="logout-link" id="logout-link">Log out / switch role</span></div>`;
+}
+
+function attachGmHandlers() {
+  const search = document.getElementById('player-search');
+  if (search) search.oninput = () => {
+    const ld = state.livedraft;
+    const picked = new Set(ld.picks.map(p => p.player));
+    const available = (ld.playerPool || []).filter(p => !picked.has(p.name));
+    document.getElementById('player-list').innerHTML = renderPlayerRows(available, search.value);
+    attachDraftButtons();
+  };
+  attachDraftButtons();
+  const logout = document.getElementById('logout-link');
+  if (logout) logout.onclick = clearSession;
+}
+function attachDraftButtons() {
+  document.querySelectorAll('.draft-btn').forEach(btn => {
+    btn.onclick = () => submitPick(btn.dataset.name);
+  });
+}
+
+function renderCommishView() {
+  const ld = state.livedraft;
+  const parts = [];
+
+  if (!ld || ld.status === 'pre' || ld.status === undefined) {
+    parts.push(renderSetupPanel());
+  } else {
+    parts.push(`
+      <div class="clock-banner">
+        <div class="who">${ld.isComplete ? 'Draft Complete' : `On the clock: ${gmName(ld.onTheClock)}`}</div>
+        <div class="meta">${ld.isComplete ? '' : `Round ${ld.round} · Pick ${ld.pickNumber}`} ${ld.status === 'paused' ? '· PAUSED' : ''}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Draft Controls</div>
+        <div class="btn-row">
+          ${ld.status === 'active' ? '<button class="btn" id="pause-btn">Pause</button>' : ''}
+          ${ld.status === 'paused' ? '<button class="btn" id="resume-btn">Resume</button>' : ''}
+          <button class="btn" id="undo-btn" ${!ld.picks.length ? 'disabled' : ''}>Undo Last Pick</button>
+          <a class="btn" href="draft-presentation.html?year=${state.year}" target="_blank" style="text-decoration:none;display:inline-block">Open Presentation View</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pick Feed</div>
+        <div class="feed">${renderFeed(ld.picks)}</div>
+      </div>
+    `);
+  }
+
+  parts.push(renderGmRegistryPanel());
+  parts.push(renderPlayerPoolPanel());
+  parts.push(renderLogout());
+  return parts.join('');
+}
+
+function renderSetupPanel() {
+  if (!draftOrderRows) draftOrderRows = [];
+  return `
+    <div class="card">
+      <div class="card-title">Start Draft</div>
+      <div class="row">
+        <div class="field"><label>Roster Size (per GM)</label><input type="number" id="roster-size" value="9" min="1"></div>
+        <div class="field"><label>Player Pool Year</label><input type="text" id="pool-year-start" value="${state.year}"></div>
+      </div>
+      <div class="field">
+        <label>Draft Order (snake — reverses each round)</label>
+        <select id="add-order-select">
+          <option value="">Add GM to order...</option>
+          ${state.gmsPublic.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+        </select>
+        <div id="order-list" style="margin-top:8px">
+          ${draftOrderRows.map((id, i) => `
+            <div class="roster-order-item">
+              <span class="pos">${i+1}.</span>
+              <span style="flex:1">${gmName(id)}</span>
+              <button class="btn btn-sm" data-move="-1" data-idx="${i}">↑</button>
+              <button class="btn btn-sm" data-move="1" data-idx="${i}">↓</button>
+              <button class="btn btn-sm" data-remove="${i}">✕</button>
+            </div>`).join('')}
+        </div>
+      </div>
+      <button class="btn btn-primary" id="start-draft-btn">Start Draft</button>
+      <div class="error-msg" id="start-error"></div>
+    </div>
+  `;
+}
+
+function renderGmRegistryPanel() {
+  return `
+    <div class="card">
+      <div class="card-title">GM Roster &amp; Tokens</div>
+      ${commishGmRows === null
+        ? `<button class="btn" id="load-gms-btn">Load GM Roster</button>`
+        : `
+          <div id="gm-rows">${commishGmRows.map((r, i) => `
+            <div class="gm-editor-row">
+              <input type="text" id="gm-id-${i}" placeholder="id (e.g. josh)" value="${r.id}">
+              <input type="text" id="gm-name-${i}" placeholder="Display name" value="${r.name}">
+              <button class="btn btn-sm" data-remove-gm="${i}">✕</button>
+            </div>
+            <div class="token-link">${location.origin}${location.pathname}?gm=${r.id}&token=${r.token}</div>
+          `).join('')}</div>
+          <div class="btn-row">
+            <button class="btn btn-sm" id="add-gm-btn">+ Add GM</button>
+            <button class="btn btn-sm btn-primary" id="save-gms-btn">Save Roster</button>
+          </div>
+          <div class="hint">Send each GM their link above before the draft — it logs them in automatically.</div>
+          <div class="error-msg" id="gm-editor-error"></div>
+        `}
+    </div>
+  `;
+}
+
+function renderPlayerPoolPanel() {
+  return `
+    <div class="card">
+      <div class="card-title">Player Pool</div>
+      <div class="field"><label>Year</label><input type="text" id="pool-year" value="${state.year}"></div>
+      <div class="field"><label>Players (JSON array, e.g. from scouting.html's PLAYERS list)</label>
+        <textarea id="pool-json" placeholder='[{"name":"Player Name","thu":"BD","fri":"T1","sat":"Teams"}]'></textarea>
+      </div>
+      <button class="btn" id="save-pool-btn">Save Player Pool</button>
+      <div class="hint" id="pool-error"></div>
+    </div>
+  `;
+}
+
+function attachCommishHandlers() {
+  const pause = document.getElementById('pause-btn'); if (pause) pause.onclick = pauseDraft;
+  const resume = document.getElementById('resume-btn'); if (resume) resume.onclick = resumeDraft;
+  const undo = document.getElementById('undo-btn'); if (undo) undo.onclick = undoPick;
+
+  const startBtn = document.getElementById('start-draft-btn'); if (startBtn) startBtn.onclick = startDraft;
+  const addOrder = document.getElementById('add-order-select');
+  if (addOrder) addOrder.onchange = () => { if (addOrder.value) addToDraftOrder(addOrder.value); };
+  document.querySelectorAll('[data-move]').forEach(btn => {
+    btn.onclick = () => moveDraftOrder(parseInt(btn.dataset.idx), parseInt(btn.dataset.move));
+  });
+  document.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.onclick = () => removeFromDraftOrder(parseInt(btn.dataset.remove));
+  });
+
+  const loadGms = document.getElementById('load-gms-btn'); if (loadGms) loadGms.onclick = loadGmEditor;
+  const addGm = document.getElementById('add-gm-btn'); if (addGm) addGm.onclick = addGmRow;
+  const saveGms = document.getElementById('save-gms-btn'); if (saveGms) saveGms.onclick = saveGmRows;
+  document.querySelectorAll('[data-remove-gm]').forEach(btn => {
+    btn.onclick = () => removeGmRow(parseInt(btn.dataset.removeGm));
+  });
+
+  const savePool = document.getElementById('save-pool-btn'); if (savePool) savePool.onclick = savePlayerPool;
+
+  const logout = document.getElementById('logout-link'); if (logout) logout.onclick = clearSession;
+}
+
+init();
+</script>
+</body>
+</html>
