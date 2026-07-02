@@ -16,20 +16,10 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
 - `scouting.html` — the actual scouting tool. Self-contained single file
   (HTML/CSS/JS, no dependencies, no build). This is where almost all the work
   has happened so far.
-- `assets/logo.png` — the original square Fantasy Draft badge (black/red/gold),
-  source of the site's color palette. No longer used directly in either page,
-  but kept as the canonical brand mark.
-- `assets/header-elements.png` — wide (2400×600) transparent PNG of just the
-  wordmark/bracket linework from the badge, stretched full-width. This is the
-  foreground layer of `index.html`'s header.
-- `assets/header-banner.svg` — hand-authored backdrop (dark base + red/gold
-  radial glows + dot texture + bottom accent bar) sized to the same 2400×600
-  canvas, sits behind `header-elements.png` via CSS. Regenerate this if the
-  palette changes; it's the only header asset that's code (not a design file).
-- `assets/header-graphic.png` — an earlier, fully-opaque full-width version of
-  the header banner (same wordmark, but with the badge's dark chevron texture
-  baked in instead of the glow). No longer referenced by either page; kept
-  around as a design alternate.
+- `assets/header-small.png` — compact (900×220) transparent PNG logo mark
+  (badge + wordmark) used in `index.html`'s header, displayed at 34px tall
+  next to the tab bar. The header itself is a fixed 64px bar with a CSS
+  (not image-based) glow backdrop — no other image assets are in use.
 
 ## Data source
 
