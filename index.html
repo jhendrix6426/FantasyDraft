@@ -24,8 +24,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 24px 16px 0;
-    border-bottom: 1px solid #26262e;
     position: relative;
   }
   header::after {
@@ -33,10 +31,20 @@
     position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
     background: linear-gradient(90deg, #ff3450, #dab35e 50%, #ff3450);
   }
-  .logo {
-    height: 110px;
-    width: auto;
-    margin-bottom: 14px;
+  .banner-wrap {
+    width: 100%;
+    aspect-ratio: 2400 / 600;
+    position: relative;
+    background-image: url('assets/header-banner.svg');
+    background-size: 100% 100%;
+  }
+  .banner {
+    width: 100%;
+    height: 100%;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
   }
   nav.tabs {
     display: flex;
@@ -44,6 +52,7 @@
     width: 100%;
     max-width: 900px;
     justify-content: center;
+    padding: 14px 16px 0;
   }
   nav.tabs button {
     background: #131317;
@@ -86,7 +95,9 @@
 </head>
 <body>
 <header>
-  <img class="logo" src="assets/logo.png" alt="Fantasy Draft">
+  <div class="banner-wrap">
+    <img class="banner" src="assets/header-elements.png" alt="Fantasy Draft">
+  </div>
   <nav class="tabs">
     <button class="active" data-tab="scouting">Scouting</button>
   </nav>
