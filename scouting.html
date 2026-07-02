@@ -105,7 +105,16 @@ select:focus, input[type=text]:focus, input[type=number]:focus {
   content: ''; display: block; height: 3px; width: 100%;
   background: linear-gradient(90deg, var(--red), var(--gold) 50%, var(--red));
 }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#table-wrap {
+  overflow-x: auto;
+  scrollbar-color: var(--gold) var(--panel-2);
+  scrollbar-width: auto;
+}
+#table-wrap::-webkit-scrollbar { height: 12px; }
+#table-wrap::-webkit-scrollbar-track { background: var(--panel-2); }
+#table-wrap::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 6px; border: 2px solid var(--panel-2); }
+#table-wrap::-webkit-scrollbar-thumb:hover { background: var(--gold-bright); }
+table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 12px; }
 th {
   text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border);
   color: var(--gold); white-space: nowrap; cursor: pointer; user-select: none;
@@ -280,6 +289,10 @@ tbody tr:hover { border-left: 2px solid var(--red); }
     </div>
     <div class="modal-body">
       <div class="modal-section">
+        <div class="modal-sec-title">Records Held</div>
+        <div id="m-records"></div>
+      </div>
+      <div class="modal-section">
         <div class="modal-sec-title">Nationals History — 2022 to Present (registered formats only)</div>
         <div id="m-nats"></div>
       </div>
@@ -295,8 +308,10 @@ tbody tr:hover { border-left: 2px solid var(--red); }
   </div>
 </div>
 
+<script src="records.js"></script>
 <script>
 const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+let recordsBook = null;
 
 const FMT_MAP = {
   'T1 2-Player':'T1','T2 2-Player':'T2','Booster Draft':'BD',
@@ -461,6 +476,7 @@ async function init() {
     processNats(db);
     processFantasyDraft(db);
     processMatches(db);
+    recordsBook = RecordsBook.compute(db);
     setStatus(`Loaded. ${PLAYERS.length} players · ${Object.keys(playerNatsData).length} with Nats history (2022–present).`);
   } catch(e) {
     setStatus(`Could not load Nats data: ${e.message}. Showing players without history.`);
@@ -846,6 +862,30 @@ function openModal(name) {
   document.getElementById('m-name').textContent = name;
   document.getElementById('m-meta').textContent =
     `${[p.thu,p.fri,p.sat].filter(Boolean).map(f=>FMT_LABEL[f]||f).join(' · ')} · ${p.days} day${p.days!==1?'s':''}${p.firstNats?' · First Nationals':''}`;
+
+  // RECORDS HELD
+  const heldRecords = recordsBook ? RecordsBook.recordsForPlayer(recordsBook, name) : [];
+  let recordsHtml;
+  if (heldRecords.length) {
+    recordsHtml = `
+      <div class="category-row" onclick="toggleEl('m-records-detail', this)">
+        <span class="chevron-toggle">›</span>
+        🏆 ${heldRecords.length} record${heldRecords.length !== 1 ? 's' : ''} held
+      </div>
+      <div class="collapsible-body" id="m-records-detail">
+        <table class="modal-tbl">
+          <thead><tr><th>Record</th><th class="r">Value</th><th class="r">Year</th></tr></thead>
+          <tbody>${heldRecords.map(r => `<tr>
+            <td>${r.label}</td>
+            <td class="r">${r.value}</td>
+            <td class="r">${r.year}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  } else {
+    recordsHtml = '<div class="no-data-msg">No records held (yet).</div>';
+  }
+  document.getElementById('m-records').innerHTML = recordsHtml;
 
   // NATS HISTORY
   const activeYears = getActiveYears();

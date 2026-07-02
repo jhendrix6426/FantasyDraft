@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Records — Fantasy Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --border-soft: #1c1c22;
+  --red: #ff3450;
+  --red-dim: #7a1424;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+  --cyan: #3ec7ff;
+  --green: #35d488;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scrollbar-color: var(--border) var(--bg); }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 900px 500px at 12% -10%, rgba(255,52,80,0.14), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(218,179,94,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+.page { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: 28px 4px 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 3px; color: var(--red);
+  background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
+  padding: 4px 10px; border-radius: 100px; margin-bottom: 10px;
+}
+.hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+h1 {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; font-size: 28px; line-height: 1.1; margin-bottom: 8px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.status {
+  display: inline-block; color: var(--text-dim); font-size: 11px;
+  padding: 5px 12px; background: var(--panel); border: 1px solid var(--border-soft);
+  border-radius: 100px;
+}
+
+.card {
+  background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--gold) 50%, var(--red));
+}
+.card-title {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 14px;
+}
+.hint { color: var(--text-mute); font-size: 11px; margin-top: 10px; line-height: 1.5; }
+
+.record-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.record-tile {
+  background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 14px 16px;
+}
+.record-tile.clickable { cursor: pointer; transition: border-color .15s, transform .15s; }
+.record-tile.clickable:hover { border-color: var(--gold); transform: translateY(-1px); }
+.record-tile .r-label {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 1.5px; color: var(--gold); margin-bottom: 8px;
+}
+.record-tile .r-holder { font-weight: 600; color: var(--gold-bright); font-size: 14px; margin-bottom: 4px; }
+.record-tile .r-value { color: var(--text); font-size: 13px; margin-bottom: 4px; }
+.record-tile .r-value strong { color: var(--cyan); }
+.record-tile .r-context { color: var(--text-dim); font-size: 10px; }
+.record-tile.empty { color: var(--text-mute); font-size: 12px; display: flex; align-items: center; justify-content: center; min-height: 70px; }
+
+.fmt-tag {
+  display: inline-block; padding: 3px 8px; border-radius: 100px; font-size: 10px;
+  font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+}
+.fmt-T1 { background: rgba(62,199,255,0.12); color: var(--cyan); border: 1px solid rgba(62,199,255,0.35); }
+.fmt-T2 { background: rgba(255,52,80,0.12); color: #ff8a9b; border: 1px solid rgba(255,52,80,0.35); }
+.fmt-BD { background: rgba(53,212,136,0.12); color: var(--green); border: 1px solid rgba(53,212,136,0.35); }
+.fmt-SD { background: rgba(218,179,94,0.14); color: var(--gold-bright); border: 1px solid rgba(218,179,94,0.4); }
+.fmt-Teams { background: rgba(190,110,255,0.12); color: #c295ff; border: 1px solid rgba(190,110,255,0.35); }
+.fmt-TA { background: rgba(255,140,60,0.12); color: #ffab6b; border: 1px solid rgba(255,140,60,0.35); }
+
+/* Record detail modal */
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(4,4,6,.88); backdrop-filter: blur(2px); z-index: 1000; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 20px; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 620px; margin: auto; padding: 0; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.modal-head {
+  background: linear-gradient(120deg, rgba(255,52,80,0.16), var(--panel-2) 60%);
+  padding: 18px 22px; border-bottom: 1px solid var(--border); border-top: 3px solid var(--red);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.modal-name { color: var(--text); font-family: 'Oswald', sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.modal-meta { color: var(--text-dim); font-size: 11px; margin-top: 5px; }
+.modal-close {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text-dim); padding: 5px 12px;
+  cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11px; flex-shrink: 0; border-radius: 100px;
+  transition: color .15s, border-color .15s;
+}
+.modal-close:hover { color: var(--red); border-color: var(--red); }
+.modal-body { padding: 18px 22px; }
+.rm-line { font-size: 13px; margin-bottom: 8px; }
+.rm-line strong { color: var(--cyan); }
+.rm-hint { color: var(--text-dim); font-size: 11px; margin-top: 10px; }
+.rm-tbl { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.rm-tbl th { text-align: left; padding: 6px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-mute); border-bottom: 1px solid var(--border); font-weight: 500; font-family: 'Oswald', sans-serif; }
+.rm-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border-soft); }
+.rm-tbl tfoot td { border-bottom: none; border-top: 1px solid var(--border); }
+.rm-tbl .r { text-align: right; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="hero-tag">Records</div>
+    <h1 id="page-title">All-Time Record Book</h1>
+    <div class="status" id="status">Loading...</div>
+  </header>
+  <div id="app"></div>
+</div>
+
+<div class="modal-bg" id="record-modal" onclick="if(event.target===this)closeRecordModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-name" id="rm-title">—</div>
+        <div class="modal-meta" id="rm-meta">—</div>
+      </div>
+      <button class="modal-close" onclick="closeRecordModal()">Close ✕</button>
+    </div>
+    <div class="modal-body" id="rm-body"></div>
+  </div>
+</div>
+
+<script src="records.js"></script>
+<script>
+const API = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+let currentBook = null;
+let currentDb = null;
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+function tile(label, holder, valueHtml, year, context, onclickAttr) {
+  if (!holder) return `<div class="record-tile empty">No qualifying data yet</div>`;
+  return `
+    <div class="record-tile clickable" ${onclickAttr || ''}>
+      <div class="r-label">${label}</div>
+      <div class="r-holder">${holder}</div>
+      <div class="r-value">${valueHtml}</div>
+      <div class="r-context">${year}${context ? ' · ' + context : ''}</div>
+    </div>`;
+}
+
+function fmtTag(f) {
+  const known = ['T1','T2','BD','SD','Teams','TA'];
+  const cls = known.includes(f) ? `fmt-tag fmt-${f}` : 'fmt-tag';
+  return `<span class="${cls}">${RecordsBook.FMT_LABEL[f] || f}</span>`;
+}
+
+function render(book) {
+  const app = document.getElementById('app');
+
+  // Format Records — dynamic over whatever format keys actually appear in
+  // the data (bonus categories like "Top Cut" are excluded in records.js).
+  const fmtKeys = Object.keys(book.formatHighScore).sort();
+  const formatTiles = fmtKeys.length
+    ? fmtKeys.map(fmt => {
+        const r = book.formatHighScore[fmt];
+        return tile(`Best ${RecordsBook.FMT_LABEL[fmt] || fmt} Score`, r.player, `<strong>${r.pts}</strong> pts`, r.year, fmtTag(fmt), `onclick="openRecordDetail('format','${fmt}')"`);
+      }).join('')
+    : tile('Format Records', null);
+
+  const dayOrder = ['thu','fri','sat'];
+  const dayTiles = dayOrder.map(day => {
+    const r = book.dayHighScore[day];
+    if (!r) return tile(`Best ${RecordsBook.DAY_LABEL[day]} Score`, null);
+    return tile(`Best ${RecordsBook.DAY_LABEL[day]} Score`, r.player, `<strong>${r.pts}</strong> pts`, r.year, fmtTag(r.fmt), `onclick="openRecordDetail('day','${day}')"`);
+  }).join('');
+
+  const st = book.seasonTotal;
+  const mw = book.mostWins;
+  const wp = book.seasonWinPct;
+  const ws = book.winStreak;
+  const seasonTiles = [
+    tile('Highest Season Total', st && st.player, st ? `<strong>${st.pts}</strong> pts` : '', st && st.year, '', `onclick="openRecordDetail('seasonTotal')"`),
+    tile('Most Wins (Season)', mw && mw.player, mw ? `<strong>${mw.wins}</strong> wins (${mw.wins}-${mw.losses})` : '', mw && mw.year, '', `onclick="openRecordDetail('mostWins')"`),
+    tile('Best Season Win%', wp && wp.player, wp ? `<strong>${wp.wins}-${wp.losses}</strong> (${wp.pct}%)` : '', wp && wp.year, wp ? `min. 5 matches` : '', `onclick="openRecordDetail('winPct')"`),
+    tile('Longest Win Streak', ws && ws.player, ws ? `<strong>${ws.length}</strong> straight wins${ws.active ? ' — active' : ''}` : '', ws && (ws.startYear === ws.endYear ? ws.startYear : `${ws.startYear}–${ws.endYear}`), ws ? 'spans multiple seasons if unbroken' : '', `onclick="openRecordDetail('streak')"`)
+  ].join('');
+
+  const ts = book.teamScore;
+  const dsteal = book.draftSteal;
+  const fantasyTiles = [
+    tile('Best Single-Draft Team Score', ts && ts.gm, ts ? `<strong>${ts.pts}</strong> pts` : '', ts && ts.year, ts ? 'GM' : '', `onclick="openRecordDetail('teamScore')"`),
+    tile('Best Draft Value Pick ("Steal")', dsteal && dsteal.player, dsteal ? `<strong>+${dsteal.delta}</strong> vs. window` : '', dsteal && dsteal.year, dsteal ? `Pick #${dsteal.pick} · drafted by ${dsteal.gm}` : '', `onclick="openRecordDetail('draftSteal')"`)
+  ].join('');
+
+  app.innerHTML = `
+    <div class="card">
+      <div class="card-title">Format Records</div>
+      <div class="record-grid">${formatTiles}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Single-Day Records</div>
+      <div class="record-grid">${dayTiles}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Season &amp; Streak Records</div>
+      <div class="record-grid">${seasonTiles}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Fantasy Draft Records</div>
+      <div class="record-grid">${fantasyTiles}</div>
+      <div class="hint">All records are scoped to players drafted onto a fantasy team that year (2024–present) — Nationals performances outside a draft context don't count. Records update automatically as new seasons are logged. Click any record for the data behind it.</div>
+    </div>
+  `;
+}
+
+// ── Record detail modal ─────────────────────────────────────────
+function modalOpen(title, meta, bodyHtml) {
+  document.getElementById('rm-title').textContent = title;
+  document.getElementById('rm-meta').textContent = meta;
+  document.getElementById('rm-body').innerHTML = bodyHtml;
+  document.getElementById('record-modal').classList.add('open');
+}
+function closeRecordModal() { document.getElementById('record-modal').classList.remove('open'); }
+
+function wldLine(wld) {
+  if (!wld || (wld.w + wld.l + wld.d) === 0) return '';
+  return `<div class="rm-line">Match record that year: <strong>${wld.w}-${wld.l}${wld.d ? '-' + wld.d : ''}</strong>${wld.d ? ' (W-L-D)' : ' (W-L)'}</div>`;
+}
+
+function openRecordDetail(type, key) {
+  const book = currentBook, db = currentDb;
+
+  if (type === 'format') {
+    const r = book.formatHighScore[key];
+    const wld = RecordsBook.winLossDrawForPlayerYear(db, r.player, r.year);
+    const fmtWld = wld.byFmt[key];
+    modalOpen(`Best ${RecordsBook.FMT_LABEL[key] || key} Score`, `${r.player} · ${r.year}`, `
+      <div class="rm-line">${fmtTag(key)} score: <strong>${r.pts} pts</strong></div>
+      ${fmtWld ? `<div class="rm-line">Match record in ${RecordsBook.FMT_LABEL[key] || key} that year: <strong>${fmtWld.w}-${fmtWld.l}${fmtWld.d ? '-' + fmtWld.d : ''}</strong></div>` : ''}
+    `);
+
+  } else if (type === 'day') {
+    const r = book.dayHighScore[key];
+    const wld = RecordsBook.winLossDrawForPlayerYear(db, r.player, r.year);
+    const fmtWld = wld.byFmt[r.fmt];
+    modalOpen(`Best ${RecordsBook.DAY_LABEL[key]} Score`, `${r.player} · ${r.year}`, `
+      <div class="rm-line">${fmtTag(r.fmt)} (played ${RecordsBook.DAY_LABEL[key]}): <strong>${r.pts} pts</strong></div>
+      ${fmtWld ? `<div class="rm-line">Match record that day: <strong>${fmtWld.w}-${fmtWld.l}${fmtWld.d ? '-' + fmtWld.d : ''}</strong></div>` : ''}
+    `);
+
+  } else if (type === 'seasonTotal') {
+    const r = book.seasonTotal;
+    const yearData = book.DD[r.year];
+    let breakdown = [];
+    for (const team of yearData.teams) {
+      const p = team.players.find(pl => RecordsBook.namesMatch(pl.name, r.player));
+      if (p) { breakdown = p.breakdown; break; }
+    }
+    const wld = RecordsBook.winLossDrawForPlayerYear(db, r.player, r.year);
+    modalOpen('Highest Season Total', `${r.player} · ${r.year}`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Format</th><th class="r">Pts</th></tr></thead>
+        <tbody>${breakdown.map(b => `<tr><td>${fmtTag(RecordsBook.FMT_MAP[b.format] || b.format)}</td><td class="r">${b.pts}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td><strong>Combined Total</strong></td><td class="r"><strong>${r.pts}</strong></td></tr></tfoot>
+      </table>
+      ${wldLine(wld)}
+    `);
+
+  } else if (type === 'mostWins') {
+    const r = book.mostWins;
+    modalOpen('Most Wins (Season)', `${r.player} · ${r.year}`, `
+      <div class="rm-line">Match record that year: <strong>${r.wins}-${r.losses}</strong> across ${r.matches} matches</div>
+    `);
+
+  } else if (type === 'winPct') {
+    const r = book.seasonWinPct;
+    const wld = RecordsBook.winLossDrawForPlayerYear(db, r.player, r.year);
+    const byFmtRows = Object.entries(wld.byFmt).map(([f, rec]) => `<tr><td>${fmtTag(f)}</td><td class="r">${rec.w}-${rec.l}${rec.d ? '-' + rec.d : ''}</td></tr>`).join('');
+    modalOpen('Best Season Win%', `${r.player} · ${r.year}`, `
+      <div class="rm-line">Overall: <strong>${r.wins}-${r.losses}</strong> (${r.pct}%) across ${r.matches} matches</div>
+      ${byFmtRows ? `<table class="rm-tbl"><thead><tr><th>Format</th><th class="r">Record</th></tr></thead><tbody>${byFmtRows}</tbody></table>` : ''}
+      <div class="rm-hint">Minimum 5 matches to qualify.</div>
+    `);
+
+  } else if (type === 'streak') {
+    const r = book.winStreak;
+    const span = r.startYear === r.endYear ? r.startYear : `${r.startYear}–${r.endYear}`;
+    modalOpen('Longest Win Streak', `${r.player} · ${span}${r.active ? ' (active)' : ''}`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Year</th><th>Day</th><th>Format</th><th>Opponent</th></tr></thead>
+        <tbody>${r.entries.map(e => `<tr><td>${e.year}</td><td>${RecordsBook.DAY_LABEL[e.day] || e.day}</td><td>${fmtTag(e.fmt)}</td><td>${e.opp}</td></tr>`).join('')}</tbody>
+      </table>
+      <div class="rm-hint">${r.length} consecutive wins${r.active ? ' — streak still active as of the latest logged season' : ''}.</div>
+    `);
+
+  } else if (type === 'teamScore') {
+    const r = book.teamScore;
+    const yearData = book.DD[r.year];
+    const team = yearData.teams.find(t => t.gm === r.gm);
+    modalOpen('Best Single-Draft Team Score', `${r.gm} (GM) · ${r.year}`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Pick</th><th>Player</th><th class="r">Pts</th></tr></thead>
+        <tbody>${[...team.players].sort((a, b) => a.pick - b.pick).map(p => `<tr><td>#${p.pick}</td><td>${p.name}</td><td class="r">${p.pts}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="2"><strong>Team Total</strong></td><td class="r"><strong>${r.pts}</strong></td></tr></tfoot>
+      </table>
+    `);
+
+  } else if (type === 'draftSteal') {
+    const r = book.draftSteal;
+    modalOpen('Best Draft Value Pick ("Steal")', `${r.player} · ${r.year}`, `
+      <div class="rm-line">Drafted <strong>#${r.pick}</strong> by ${r.gm} — scored <strong>${r.pts} pts</strong></div>
+      <div class="rm-line">Nearby picks averaged <strong>${r.windowAvg} pts</strong> — a <strong>+${r.delta}</strong> outperformance</div>
+      <table class="rm-tbl">
+        <thead><tr><th>Pick</th><th>Player</th><th class="r">Pts</th></tr></thead>
+        <tbody>${r.window.map(w => `<tr><td>#${w.pick}</td><td>${w.player}</td><td class="r">${w.pts}</td></tr>`).join('')}</tbody>
+      </table>
+    `);
+  }
+}
+
+async function init() {
+  setStatus('Loading...');
+  try {
+    const db = await fetch(API).then(r => r.json());
+    currentDb = db;
+    currentBook = RecordsBook.compute(db);
+    const yearCount = Object.keys(currentBook.DD).length;
+    setStatus(`${yearCount} draft season${yearCount === 1 ? '' : 's'} on record`);
+    render(currentBook);
+  } catch (e) {
+    setStatus('Could not load record data: ' + e.message);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

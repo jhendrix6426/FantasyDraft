@@ -198,6 +198,7 @@ h1 {
 .fmt-Teams { background: rgba(190,110,255,0.12); color: #c295ff; border: 1px solid rgba(190,110,255,0.35); }
 .fmt-TA { background: rgba(255,140,60,0.12); color: #ffab6b; border: 1px solid rgba(255,140,60,0.35); }
 .pool-avg { color: var(--text-dim); }
+.record-badge { cursor: help; font-size: 11px; }
 
 /* ── Player profile modal ── */
 .modal-bg { display: none; position: fixed; inset: 0; background: rgba(4,4,6,.88); backdrop-filter: blur(2px); z-index: 1000; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 20px; }
@@ -287,8 +288,15 @@ h1 {
   </div>
 </div>
 
+<script src="records.js"></script>
 <script>
 const API = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+let recordsBook = null;
+function badgeHtml(labels) {
+  if (!labels.length) return '';
+  const title = labels.join(' · ').replace(/"/g, '&quot;');
+  return ` <span class="record-badge" title="${title}">🏆${labels.length > 1 ? '×' + labels.length : ''}</span>`;
+}
 const FMT_MAP = {
   'T1 2-Player':'T1','T2 2-Player':'T2','Booster Draft':'BD',
   'Sealed':'SD','Teams':'Teams','Type A':'TA','Booster Draft (Multi)':'BD'
@@ -526,6 +534,7 @@ async function init() {
     const db = await fetch(API).then(r => r.json());
     RAW_DB = db;
     processFantasyDraft(db);
+    recordsBook = RecordsBook.compute(db);
   } catch (e) {
     setStatus('Could not load draft history: ' + e.message);
     render();
@@ -576,7 +585,7 @@ function renderDetail(year) {
     return `
       <div class="standings-row ${expanded ? 'expanded' : ''}" data-gm="${team.gm.replace(/"/g, '&quot;')}">
         <span class="rank">${i + 1}.</span>
-        <span class="gm-name">${team.gm}</span>
+        <span class="gm-name">${team.gm}${recordsBook ? badgeHtml(RecordsBook.badgesForTeam(recordsBook, team.gm, year)) : ''}</span>
         <span class="gm-pts">${team.pts} pts</span>
         <span class="chevron">›</span>
       </div>
@@ -584,7 +593,7 @@ function renderDetail(year) {
         <div class="roster-detail">
           ${roster.map(p => `
             <div class="roster-player-row">
-              <div><span class="pick-badge">Pick ${p.pick}</span><button class="player-link pname" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</button>
+              <div><span class="pick-badge">Pick ${p.pick}</span><button class="player-link pname" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</button>${recordsBook ? badgeHtml(RecordsBook.badgesForPlayerYear(recordsBook, p.name, year)) : ''}
                 ${p.breakdown.length ? `<div class="player-breakdown">${p.breakdown.map(b => `${b.format}: ${b.pts}`).join(' · ')}</div>` : ''}
               </div>
               <span class="ppts">${p.pts} pts</span>
@@ -606,7 +615,7 @@ function renderDetail(year) {
       <div class="round-picks">
         ${rounds[round].map(p => `
           <div class="pick-chip">
-            <span class="pick-num">#${p.pick}</span> <button class="player-link pick-player" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</button>
+            <span class="pick-num">#${p.pick}</span> <button class="player-link pick-player" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</button>${recordsBook ? badgeHtml(RecordsBook.badgesForPlayerYear(recordsBook, p.name, year)) : ''}
             <span class="pick-gm">${p.gm}</span>
           </div>`).join('')}
       </div>
