@@ -192,6 +192,13 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 .dvs-neg { color: var(--red); }
 .dvs-neu { color: var(--text-dim); }
 
+.category-row { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.category-row:hover { color: var(--gold-bright); }
+.category-row .chevron-toggle { color: var(--text-mute); transition: transform .15s; display: inline-block; }
+.category-row.open .chevron-toggle { transform: rotate(90deg); }
+.collapsible-body { display: none; padding-top: 8px; }
+.collapsible-body.open { display: block; }
+
 /* CUSTOMIZE PANEL */
 .customize-bar { margin-bottom: 10px; }
 .customize-toggle-btn {
@@ -905,23 +912,27 @@ function openModal(name) {
 
       const wins = records.filter(r=>r.win).length;
       const pct = Math.round(wins/records.length*100);
+      const detailId = `match-detail-${fmt}`;
 
       matchHtml += `<div style="margin-bottom:14px">
-        <div style="color:#c9a84c;margin-bottom:6px;font-size:12px">
+        <div class="category-row" style="color:#c9a84c;font-size:12px" onclick="toggleEl('${detailId}', this)">
+          <span class="chevron-toggle">›</span>
           ${fmtTag(fmt)} — Record: <strong>${wins}-${records.length-wins}</strong>
           <span class="pool-avg">(${pct}%)</span>
           <span class="appear-count">(${records.length} match${records.length!==1?'es':''})</span>
         </div>
-        <table class="modal-tbl">
-          <thead><tr><th>Year</th><th>Round</th><th>Opponent</th><th class="r">Score</th><th class="c">Result</th></tr></thead>
-          <tbody>${records.map(r => `<tr>
-            <td>${r.yr}</td>
-            <td>${r.round||'—'}</td>
-            <td>${r.opp}</td>
-            <td class="r">${r.scoreFor}-${r.scoreAgainst}</td>
-            <td class="c"><span class="${r.win?'pct-high':'pct-low'}">${r.win?'W':'L'}</span></td>
-          </tr>`).join('')}</tbody>
-        </table>
+        <div class="collapsible-body" id="${detailId}">
+          <table class="modal-tbl">
+            <thead><tr><th>Year</th><th>Round</th><th>Opponent</th><th class="r">Score</th><th class="c">Result</th></tr></thead>
+            <tbody>${records.map(r => `<tr>
+              <td>${r.yr}</td>
+              <td>${r.round||'—'}</td>
+              <td>${r.opp}</td>
+              <td class="r">${r.scoreFor}-${r.scoreAgainst}</td>
+              <td class="c"><span class="${r.win?'pct-high':'pct-low'}">${r.win?'W':'L'}</span></td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
       </div>`;
     }
   } else {
@@ -986,6 +997,14 @@ function openModal(name) {
 
 function closeModal() {
   document.getElementById('player-modal').classList.remove('open');
+}
+
+function toggleEl(id, headerEl) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const opening = !el.classList.contains('open');
+  el.classList.toggle('open', opening);
+  if (headerEl) headerEl.classList.toggle('open', opening);
 }
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
