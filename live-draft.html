@@ -418,9 +418,30 @@ function gmName(id) {
 
 function render() {
   const app = document.getElementById('app');
-  if (!state.role) { app.innerHTML = renderLanding(); attachLandingHandlers(); return; }
-  if (state.role === 'gm') { app.innerHTML = renderGmView(); attachGmHandlers(); return; }
-  if (state.role === 'commish') { app.innerHTML = renderCommishView(); attachCommishHandlers(); return; }
+
+  // Polling re-renders the whole app on a timer, which would otherwise steal
+  // focus and wipe out whatever the user is mid-typing. Snapshot the focused
+  // field's value/selection and restore it after the DOM is rebuilt.
+  const active = document.activeElement;
+  let focused = null;
+  if (active && active.id && app.contains(active) && 'value' in active) {
+    focused = { id: active.id, value: active.value, selStart: active.selectionStart, selEnd: active.selectionEnd };
+  }
+
+  if (!state.role) { app.innerHTML = renderLanding(); attachLandingHandlers(); }
+  else if (state.role === 'gm') { app.innerHTML = renderGmView(); attachGmHandlers(); }
+  else if (state.role === 'commish') { app.innerHTML = renderCommishView(); attachCommishHandlers(); }
+
+  if (focused) {
+    const el = document.getElementById(focused.id);
+    if (el && 'value' in el) {
+      el.value = focused.value;
+      el.focus();
+      if (focused.selStart != null && el.setSelectionRange) {
+        try { el.setSelectionRange(focused.selStart, focused.selEnd); } catch (e) {}
+      }
+    }
+  }
 }
 
 function renderLanding() {
