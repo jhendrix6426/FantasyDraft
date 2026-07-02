@@ -2,20 +2,29 @@
 
 Hobby project for a fantasy draft built around a tabletop CCG's ("Redemption")
 annual Nationals tournament. Players are drafted onto fantasy teams before
-Nationals, then scored on their real tournament performance. This repo is a
-static site (no build step, no backend) deployed on GitHub Pages.
+Nationals, then scored on their real tournament performance. The frontend is
+a static site (no build step) deployed on GitHub Pages. There is now also a
+small Cloudflare Worker backend (`worker/`) powering the live draft feature —
+see "Live Draft system" below. Everything else (scouting, standings) stays
+static/read-only with no backend of its own.
 
 Live site: https://jhendrix6426.github.io/FantasyDraft/
 Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-deploys.
 
 ## Structure
 
-- `index.html` — landing page: header banner + tab bar. Currently only one
-  tab ("Scouting"), which loads `scouting.html` in an iframe. Built to have
-  more tabs added later (draft board, standings, etc. — not built yet).
-- `scouting.html` — the actual scouting tool. Self-contained single file
-  (HTML/CSS/JS, no dependencies, no build). This is where almost all the work
-  has happened so far.
+- `index.html` — landing page: header banner + tab bar (Scouting, Live Draft).
+  Tab-switching JS lives inline at the bottom of the file — clicking a
+  `nav.tabs button` swaps `#tab-frame`'s `src` to `data-tab + '.html'`. Adding
+  another tab is just a new button with a matching `data-tab` and HTML file.
+- `scouting.html` — the scouting tool. Self-contained single file (HTML/CSS/JS,
+  no dependencies, no build). This is where most of the historical-stats work
+  has happened.
+- `live-draft.html` — GM- and commissioner-facing live draft tool (see below).
+- `draft-presentation.html` — standalone OBS-facing broadcast view for the
+  live draft (see below). Not part of the tab system — opened directly by URL.
+- `worker/` — the `fantasy-draft` Cloudflare Worker source, deployed
+  separately from the site (see "Live Draft system").
 - `assets/header-small.png` — compact (900×220) transparent PNG logo mark
   (badge + wordmark) used in `index.html`'s header, displayed at 34px tall
   next to the tab bar. The header itself is a fixed 64px bar with a CSS
@@ -99,6 +108,57 @@ data/stats — keeps numbers aligned, terminal/scoreboard feel). Format badges
 are color-coded pills (cyan/red/green/gold/purple/orange per format). Keep
 `index.html`'s tab bar styling in sync with `scouting.html` if the palette
 changes — they're meant to feel like one product.
+
+## Live Draft system
+
+A real-time, multi-device live draft, separate from the read-only
+`nationals-history` API used by `scouting.html` — this one has its own
+backend, `worker/` (Cloudflare Worker `fantasy-draft`, deployed at
+`https://fantasy-draft.jhendrix6426.workers.dev`, single KV namespace
+`FANTASY_DB`). It was built from a scrapped earlier attempt at this project
+(originally at `~/fantasy-draft-worker/`, now moved into this repo).
+
+**Auth** (there is none of this on the `nationals-history` API — don't
+confuse the two):
+- Commissioner actions (GM roster, scoring config, player pools, draft
+  start/pause/resume/undo) require an `X-Commish-Key` header matching the
+  `COMMISH_KEY` Worker secret. Set via `wrangler secret put COMMISH_KEY` from
+  `worker/` — it is **not** stored anywhere in this repo, only in Cloudflare.
+- GM pick submission requires `X-GM-Token` + `gmId` in the body, checked
+  against a `token` field on that GM's `gm_registry` entry. `GET /fantasy/gms`
+  strips tokens from the response (public); `GET /fantasy/gms?full=1` (commish
+  auth) returns them, for the roster editor in `live-draft.html`. Commissioner
+  UI generates each GM a shareable link (`live-draft.html?gm=id&token=...`)
+  rather than making them type a token.
+
+**Turn order is derived, never stored** — `computeTurn()` in `worker.js`
+recomputes the on-the-clock GM from `picks.length` and `draftOrder` (snake:
+reverses every round) on every request. There is no `currentPick` field to
+desync from the picks array.
+
+**Key endpoints** (see `worker/worker.js` for the full list): `GET
+/fantasy/livedraft/:year` (public, includes derived `onTheClock`/`round`/
+`pickNumber`/`isComplete`/`onDeck`), `POST .../start|pause|resume|undo`
+(commish), `POST .../pick` (GM token — validates turn order, player-pool
+membership, and de-dupes via a client-generated `pickRequestId` so a
+retried/double-submitted request replays the same result instead of erroring
+or double-picking).
+
+**Race conditions**: KV has no compare-and-swap. Given a small trusted GM
+group and turn-gating already limiting writes to one authorized GM at a time,
+this is handled pragmatically rather than with Durable Objects — idempotent
+`pickRequestId` replay covers accidental double-submits, and commissioner
+`undo` is the manual fallback for the rare residual case. Both `live-draft.html`
+and `draft-presentation.html` poll every 2-3s, so a bad pick would surface
+almost immediately.
+
+**Player pool**: the commissioner pastes a JSON array (matching `scouting.html`'s
+`PLAYERS` shape) into `live-draft.html`'s Player Pool panel, which `PUT`s it to
+`/fantasy/players/:year`. There's no automatic sync from `scouting.html`'s
+hardcoded `PLAYERS` array — copy/paste it manually before a draft.
+
+**Deploying worker changes**: `cd worker && wrangler deploy` (manual, no CI —
+matches how the rest of this project deploys).
 
 ## Working on this project
 

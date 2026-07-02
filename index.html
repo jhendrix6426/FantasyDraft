@@ -99,10 +99,23 @@
   </div>
   <nav class="tabs">
     <button class="active" data-tab="scouting">Scouting</button>
+    <button data-tab="live-draft">Live Draft</button>
   </nav>
 </header>
 <main>
   <iframe id="tab-frame" src="scouting.html" title="Scouting"></iframe>
 </main>
+<script>
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled || btn.classList.contains('active')) return;
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const frame = document.getElementById('tab-frame');
+      frame.src = btn.dataset.tab + '.html';
+      frame.title = btn.textContent;
+    });
+  });
+</script>
 </body>
 </html>
