@@ -138,7 +138,8 @@ button.btn-sm { padding: 6px 12px; font-size: 10px; }
 
 .gm-editor-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .gm-editor-row input { flex: 1; }
-.token-link { font-size: 10px; color: var(--cyan); word-break: break-all; margin-top: 4px; }
+.token-link-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.token-link { font-size: 10px; color: var(--cyan); word-break: break-all; flex: 1; }
 
 .roster-order-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 4px;
@@ -340,6 +341,31 @@ function addGmRow() {
   if (!commishGmRows) commishGmRows = [];
   commishGmRows.push({ id: '', name: '', token: crypto.randomUUID().replace(/-/g,'').slice(0,16), active: true });
   render();
+}
+function gmLinkFor(r) { return `${location.origin}${location.pathname}?gm=${r.id}&token=${r.token}`; }
+function refreshGmLinkRow(i) {
+  const r = commishGmRows[i];
+  const linkEl = document.getElementById('gm-link-'+i);
+  if (linkEl) linkEl.textContent = gmLinkFor(r);
+  const copyBtn = document.querySelector(`[data-copy-link="${i}"]`);
+  if (copyBtn) { copyBtn.disabled = !r.id; copyBtn.title = r.id ? '' : 'Enter an id first'; }
+}
+async function copyGmLink(i, btn) {
+  const link = gmLinkFor(commishGmRows[i]);
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(link);
+    btn.textContent = 'Copied!';
+  } catch (e) {
+    const linkEl = document.getElementById('gm-link-'+i);
+    const range = document.createRange();
+    range.selectNodeContents(linkEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    btn.textContent = 'Selected';
+  }
+  setTimeout(() => { btn.textContent = original; }, 1500);
 }
 function removeGmRow(idx) {
   commishGmRows.splice(idx, 1);
@@ -642,13 +668,16 @@ function renderGmRegistryPanel() {
               <input type="text" id="gm-name-${i}" placeholder="Display name" value="${r.name}">
               <button class="btn btn-sm" data-remove-gm="${i}">✕</button>
             </div>
-            <div class="token-link">${location.origin}${location.pathname}?gm=${r.id}&token=${r.token}</div>
+            <div class="token-link-row">
+              <div class="token-link" id="gm-link-${i}">${gmLinkFor(r)}</div>
+              <button class="btn btn-sm" data-copy-link="${i}" ${r.id ? '' : 'disabled title="Enter an id first"'}>Copy</button>
+            </div>
           `).join('')}</div>
           <div class="btn-row">
             <button class="btn btn-sm" id="add-gm-btn">+ Add GM</button>
             <button class="btn btn-sm btn-primary" id="save-gms-btn">Save Roster</button>
           </div>
-          <div class="hint">Send each GM their link above before the draft — it logs them in automatically.</div>
+          <div class="hint">Click "Save Roster" first, then send each GM their link above — it logs them in automatically.</div>
           <div class="error-msg" id="gm-editor-error"></div>
         `}
     </div>
@@ -690,6 +719,17 @@ function attachCommishHandlers() {
   document.querySelectorAll('[data-remove-gm]').forEach(btn => {
     btn.onclick = () => removeGmRow(parseInt(btn.dataset.removeGm));
   });
+  if (commishGmRows) {
+    commishGmRows.forEach((r, i) => {
+      const idInp = document.getElementById('gm-id-'+i);
+      const nameInp = document.getElementById('gm-name-'+i);
+      if (idInp) idInp.oninput = () => { r.id = idInp.value; refreshGmLinkRow(i); };
+      if (nameInp) nameInp.oninput = () => { r.name = nameInp.value; };
+    });
+    document.querySelectorAll('[data-copy-link]').forEach(btn => {
+      btn.onclick = () => copyGmLink(parseInt(btn.dataset.copyLink), btn);
+    });
+  }
 
   const savePool = document.getElementById('save-pool-btn'); if (savePool) savePool.onclick = savePlayerPool;
 
