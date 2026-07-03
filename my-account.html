@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Draft Board — Fantasy Draft</title>
+<title>My Account — Fantasy Draft</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,6 +22,7 @@
   --text-dim: #8b8b98;
   --text-mute: #4d4d58;
   --cyan: #3ec7ff;
+  --green: #35d488;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scrollbar-color: var(--border) var(--bg); }
@@ -36,7 +37,7 @@ body {
   min-height: 100vh;
   padding-bottom: 40px;
 }
-.page { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+.page { max-width: 560px; margin: 0 auto; padding: 0 20px; }
 
 .hero { padding: 28px 4px 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
 .hero-tag {
@@ -93,9 +94,9 @@ select:focus, input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba
 .btn:disabled { opacity: .4; cursor: default; }
 .btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
-.btn-sm { padding: 6px 12px; font-size: 10px; }
 
 .error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
+.success-msg { color: var(--green); font-size: 12px; margin-top: 8px; }
 .hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
 .login-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
@@ -111,21 +112,11 @@ select:focus, input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba
 .site-nav a.home { color: var(--gold); font-weight: 600; }
 .site-nav .sep { color: var(--text-mute); }
 
-.board-list { max-height: 520px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 4px; }
-.board-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; border-bottom: 1px solid var(--border-soft);
-}
-.board-row:last-child { border-bottom: none; }
-.board-row.taken { opacity: 0.45; }
-.board-row.taken .board-name { text-decoration: line-through; }
-.board-rank { color: var(--gold); font-weight: 700; width: 22px; flex-shrink: 0; }
-.board-name-wrap { flex: 1; min-width: 0; }
-.board-name { font-weight: 600; }
-.board-status { color: var(--text-mute); font-size: 10px; }
+.account-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+.account-row:last-child { border-bottom: none; }
+.account-row .k { color: var(--text-mute); text-transform: uppercase; font-size: 10px; letter-spacing: 1px; font-family: 'Oswald', sans-serif; }
+.account-row .v { color: var(--text); font-weight: 600; }
 
-.links-row { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
-.links-row a { color: var(--cyan); font-size: 11px; text-decoration: underline; }
 .logout-link { color: var(--text-mute); font-size: 11px; cursor: pointer; text-decoration: underline; }
 .logout-link:hover { color: var(--text); }
 </style>
@@ -134,8 +125,8 @@ select:focus, input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba
 <div class="page">
   <div id="site-nav"></div>
   <header class="hero">
-    <div class="hero-tag">My Draft Board</div>
-    <h1 id="page-title">Draft Board</h1>
+    <div class="hero-tag">My Account</div>
+    <h1 id="page-title">My Account</h1>
     <div class="status" id="status">Loading...</div>
   </header>
 
@@ -143,9 +134,9 @@ select:focus, input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba
 </div>
 
 <script>
-// This page is always opened directly (never through index.html's tab
-// bar/iframe — see CLAUDE.md), so it never has the site header/nav unless
-// we add it ourselves.
+// Same rationale as my-board.html: this page is always opened directly, never
+// through index.html's tab bar/iframe, so it never has the site header/nav
+// unless we add it ourselves.
 if (window.self === window.top) {
   document.getElementById('site-nav').innerHTML = `
     <nav class="site-nav">
@@ -157,7 +148,6 @@ if (window.self === window.top) {
     </nav>`;
 }
 </script>
-
 <script>
 const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
 
@@ -166,10 +156,6 @@ const state = {
   year: parseInt(params.get('year')) || 2026,
   gmId: null, gmToken: null, gmName: null,
   gmsPublic: [],
-  playerPool: [],
-  board: [],
-  livedraft: null,   // fetched read-only, only to show "already taken" status
-  pollTimer: null,
   error: null,
 };
 
@@ -187,48 +173,14 @@ const gmFetch = (path, method, body) => apiFetch(path, {
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
-// Shared with live-draft.html on purpose — logging in here also logs you in
-// there, and vice versa, since it's the same GM identity either way.
+// Shared with live-draft.html/my-board.html on purpose — logging in on any of
+// them logs you in on the others, since it's the same GM identity either way.
 function saveGmSession() {
   localStorage.setItem('livedraft-gm', JSON.stringify({ gmId: state.gmId, gmToken: state.gmToken, gmName: state.gmName, year: state.year }));
 }
 function clearSession() {
   localStorage.removeItem('livedraft-gm');
   location.reload();
-}
-
-async function loadBoardData() {
-  try { state.playerPool = await publicGet(`/fantasy/players/${state.year}`); } catch (e) { state.playerPool = []; }
-  try {
-    const r = await gmFetch(`/fantasy/livedraft/${state.year}/board?gmId=${encodeURIComponent(state.gmId)}`, 'GET');
-    state.board = r.board || [];
-  } catch (e) { state.board = []; }
-  try { state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`); } catch (e) { state.livedraft = null; }
-  render();
-}
-
-// Skip the render (not the fetch) while focus is inside a form control, so a
-// background poll can't destroy an open <select> or an in-progress edit —
-// see the matching note in live-draft.html's fetchLivedraft().
-function isInteractingWithForm() {
-  const el = document.activeElement;
-  if (!el) return false;
-  const app = document.getElementById('app');
-  return ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) && app.contains(el);
-}
-
-function startPolling() {
-  stopPolling();
-  state.pollTimer = setInterval(async () => {
-    try {
-      state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`);
-      if (!isInteractingWithForm()) render();
-    } catch (e) { /* keep last known state */ }
-  }, 5000);
-}
-function stopPolling() {
-  if (state.pollTimer) clearInterval(state.pollTimer);
-  state.pollTimer = null;
 }
 
 async function init() {
@@ -242,8 +194,7 @@ async function init() {
       state.gmId = v.id; state.gmName = v.name; state.gmToken = linkToken;
       saveGmSession();
       setStatus(`Logged in as ${state.gmName}`);
-      await loadBoardData();
-      startPolling();
+      render();
       return;
     } catch (e) { /* fall through to normal login */ }
   }
@@ -252,12 +203,11 @@ async function init() {
   if (saved && saved.year === state.year) {
     state.gmId = saved.gmId; state.gmToken = saved.gmToken; state.gmName = saved.gmName;
     setStatus(`Logged in as ${state.gmName}`);
-    await loadBoardData();
-    startPolling();
+    render();
     return;
   }
 
-  setStatus('Log in to view your board');
+  setStatus('Log in to manage your account');
   render();
 }
 
@@ -272,8 +222,7 @@ async function loginAsGm() {
     state.gmId = v.id; state.gmName = v.name; state.gmToken = token;
     saveGmSession();
     setStatus(`Logged in as ${state.gmName}`);
-    await loadBoardData();
-    startPolling();
+    render();
   } catch (e) {
     errEl.textContent = 'That token doesn\'t match — check with the commissioner.';
   }
@@ -290,48 +239,38 @@ async function loginAsGmWithPassword() {
     state.gmId = v.id; state.gmName = v.name; state.gmToken = v.token;
     saveGmSession();
     setStatus(`Logged in as ${state.gmName}`);
-    await loadBoardData();
-    startPolling();
+    render();
   } catch (e) {
     errEl.textContent = 'Incorrect email or password.';
   }
 }
 
-// ── Board mutations ──────────────────────────────────────────────
-async function saveBoard() {
-  try { await gmFetch(`/fantasy/livedraft/${state.year}/board`, 'PUT', { gmId: state.gmId, board: state.board }); }
-  catch (e) { /* board still reflects locally; next edit will retry the save */ }
-}
-function addToBoard(name) {
-  if (!name || state.board.includes(name)) return;
-  state.board.push(name);
-  render();
-  saveBoard();
-}
-function removeFromBoard(idx) {
-  state.board.splice(idx, 1);
-  render();
-  saveBoard();
-}
-function moveBoard(idx, dir) {
-  const j = idx + dir;
-  if (j < 0 || j >= state.board.length) return;
-  [state.board[idx], state.board[j]] = [state.board[j], state.board[idx]];
-  render();
-  saveBoard();
-}
-
-// ── Render ────────────────────────────────────────────────────
-function gmName(id) {
-  const g = state.gmsPublic.find(g => g.id === id);
-  return g ? g.name : id;
+async function changePassword() {
+  const currentPassword = document.getElementById('current-password').value;
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  const errEl = document.getElementById('change-pw-error');
+  const okEl = document.getElementById('change-pw-success');
+  errEl.textContent = ''; okEl.textContent = '';
+  if (!currentPassword || !newPassword) { errEl.textContent = 'Fill in both your current and new password.'; return; }
+  if (newPassword.length < 6) { errEl.textContent = 'New password must be at least 6 characters.'; return; }
+  if (newPassword !== confirmPassword) { errEl.textContent = 'New password and confirmation don\'t match.'; return; }
+  try {
+    await gmFetch('/fantasy/gms/change-password', 'POST', { gmId: state.gmId, currentPassword, newPassword });
+    okEl.textContent = 'Password changed.';
+    document.getElementById('current-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
+  } catch (e) {
+    errEl.textContent = e.message === 'Current password is incorrect' ? e.message : 'Could not change password: ' + e.message;
+  }
 }
 
 function render() {
   const app = document.getElementById('app');
   if (!state.gmId) { app.innerHTML = renderLogin(); attachLoginHandlers(); return; }
-  app.innerHTML = renderBoard();
-  attachBoardHandlers();
+  app.innerHTML = renderAccount();
+  attachAccountHandlers();
 }
 
 function renderLogin() {
@@ -354,7 +293,7 @@ function renderLogin() {
       <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
       <button class="btn" id="gm-login-btn">Log In With Token</button>
       <div class="error-msg" id="gm-login-error"></div>
-      <div class="hint">Already logged into Live Draft on this device? This page picks that session up automatically — or use your commissioner-issued link (<code>?gm=id&amp;token=...</code>) directly.</div>
+      <div class="hint">If you don't have a password yet, ask your commissioner to set one from the Live Draft GM Roster panel — then come back here to change it to something memorable.</div>
     </div>
   `;
 }
@@ -363,66 +302,29 @@ function attachLoginHandlers() {
   document.getElementById('gm-password-login-btn').onclick = loginAsGmWithPassword;
 }
 
-function renderBoard() {
-  const picked = new Set(state.livedraft ? state.livedraft.picks.map(p => p.player) : []);
-  const pickerOf = {};
-  if (state.livedraft) for (const p of state.livedraft.picks) pickerOf[p.player] = p.gm;
-
-  const pool = state.playerPool || [];
-  const poolByName = {};
-  for (const p of pool) poolByName[p.name] = p;
-  const board = state.board || [];
-  const onBoard = new Set(board);
-  const addOptions = pool.filter(p => !onBoard.has(p.name)).sort((a, b) => a.name.localeCompare(b.name));
-
-  const rows = board.length ? board.map((name, i) => {
-    const p = poolByName[name];
-    const isPicked = picked.has(name);
-    const fmts = p ? [p.thu, p.fri, p.sat].filter(Boolean).join(' · ') : '';
-    const status = isPicked ? `taken by ${gmName(pickerOf[name])}` : fmts;
-    return `
-      <div class="board-row ${isPicked ? 'taken' : ''}">
-        <span class="board-rank">${i + 1}.</span>
-        <div class="board-name-wrap">
-          <div class="board-name">${name}</div>
-          <div class="board-status">${status}</div>
-        </div>
-        <button class="btn btn-sm" data-move="-1" data-idx="${i}">↑</button>
-        <button class="btn btn-sm" data-move="1" data-idx="${i}">↓</button>
-        <button class="btn btn-sm" data-remove="${i}">✕</button>
-      </div>`;
-  }).join('') : '<div class="hint" style="padding:14px">Your board is empty — add players below to start ranking them.</div>';
-
+function renderAccount() {
   return `
     <div class="card">
-      <div class="card-title">${state.gmName}'s Board — ${state.year}</div>
-      <div class="board-list">${rows}</div>
-      <div class="field" style="margin-top:12px">
-        <select id="board-add-select">
-          <option value="">Add player to board...</option>
-          ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
-        </select>
-      </div>
-      <div class="hint">This is the same board you can draft directly from in Live Draft when you're on the clock — changes here show up there immediately, and vice versa.</div>
-      <div class="links-row">
-        <a href="live-draft.html?year=${state.year}" target="_blank">Open Live Draft</a>
-        <a href="scouting.html" target="_blank">Open Scouting</a>
-        <span class="logout-link" id="logout-link">Log out / switch GM</span>
-      </div>
+      <div class="card-title">Account</div>
+      <div class="account-row"><span class="k">Name</span><span class="v">${state.gmName}</span></div>
+      <div class="account-row"><span class="k">GM ID</span><span class="v">${state.gmId}</span></div>
     </div>
+    <div class="card">
+      <div class="card-title">Change Password</div>
+      <div class="field"><label>Current Password</label><input type="password" id="current-password"></div>
+      <div class="field"><label>New Password</label><input type="password" id="new-password"></div>
+      <div class="field"><label>Confirm New Password</label><input type="password" id="confirm-password"></div>
+      <button class="btn btn-primary" id="change-pw-btn">Change Password</button>
+      <div class="error-msg" id="change-pw-error"></div>
+      <div class="success-msg" id="change-pw-success"></div>
+      <div class="hint">Don't know your current password? Ask your commissioner to reset it from the Live Draft GM Roster panel.</div>
+    </div>
+    <div style="margin-top:16px"><span class="logout-link" id="logout-link">Log out / switch role</span></div>
   `;
 }
-function attachBoardHandlers() {
-  const boardAdd = document.getElementById('board-add-select');
-  if (boardAdd) boardAdd.onchange = () => { if (boardAdd.value) addToBoard(boardAdd.value); };
-  document.querySelectorAll('[data-move]').forEach(btn => {
-    btn.onclick = () => moveBoard(parseInt(btn.dataset.idx), parseInt(btn.dataset.move));
-  });
-  document.querySelectorAll('[data-remove]').forEach(btn => {
-    btn.onclick = () => removeFromBoard(parseInt(btn.dataset.remove));
-  });
-  const logout = document.getElementById('logout-link');
-  if (logout) logout.onclick = clearSession;
+function attachAccountHandlers() {
+  document.getElementById('change-pw-btn').onclick = changePassword;
+  document.getElementById('logout-link').onclick = clearSession;
 }
 
 init();

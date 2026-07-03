@@ -15,8 +15,8 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
 
 - `index.html` — landing page: header banner + tab bar (GM Tools, Live Draft,
   Live Scoring, Draft History, Records). "GM Tools" is a `.tab-group` — click
-  opens a `.tab-dropdown` with two sub-tabs (Scouting, My Draft Board) rather
-  than loading a page directly; the toggle button gets `.active` whenever
+  opens a `.tab-dropdown` with three sub-tabs (Scouting, My Draft Board, My
+  Account) rather than loading a page directly; the toggle button gets `.active` whenever
   either sub-tab's page is loaded, same visual treatment as a normal tab. The
   other four are plain buttons. Tab-switching JS lives inline at the bottom of
   the file — clicking any `[data-tab]` button swaps `#tab-frame`'s `src` to
@@ -56,6 +56,9 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
   tab/device separate from both `live-draft.html` and `scouting.html`. Not
   part of the tab system — opened directly by URL or via a link from
   `live-draft.html`'s board panel.
+- `my-account.html` — standalone GM-only page for changing your own password
+  (see "Email+password" below). Same not-part-of-the-tab-system status as
+  `my-board.html`.
 - `draft-presentation.html` — standalone OBS-facing broadcast view for the
   live draft (see below). Not part of the tab system — opened directly by URL.
 - `live-scoring.html` — scorekeeper-facing live scoring entry tool (see
@@ -173,6 +176,44 @@ confuse the two):
   "Just Watching" option alongside GM/Commissioner that just links straight
   to `draft-presentation.html?year=...` — for anyone who wants to follow
   along without a GM token or commish key.
+
+**Email+password is an alternate GM login, not a replacement for tokens.**
+A GM's `gm_registry` entry can carry `email` + `passwordHash`/`passwordSalt`
+(PBKDF2, 100k iterations, via Workers' built-in `crypto.subtle` — no external
+dependency) alongside their existing `token`. `POST /fantasy/gms/login`
+(public — email+password) returns that same `token` on success, so every
+other GM-authenticated endpoint (`pick`, `board`, etc.) needs zero changes;
+password login is just a nicer front door onto the identical session. The
+shareable token link still works untouched and is the ultimate fallback.
+- `POST /fantasy/gms/reset-password` (commish auth, body `{gmId}`) generates
+  a new auto-generated `word-word-number` password (e.g. `swift-tiger-42` —
+  easy to read aloud/text) and returns it **once**, for the commissioner to
+  relay out of band. No email-sending infrastructure exists or is needed —
+  this is the entire recovery story, from the GM Roster panel's "Reset
+  Password" button in `live-draft.html`. The revealed password shows inline
+  in that GM's row (`.pw-reveal-row`, transient client-side state on
+  `commishGmRows[i].revealedPassword` — never persisted or sent back to the
+  Worker) with a Copy button (same clipboard-then-select-text fallback
+  pattern as `copyGmLink`) and a Hide button, rather than a plain `alert()`,
+  specifically so it can be copied in one click.
+- `POST /fantasy/gms/change-password` (GM-token auth, body `{gmId,
+  currentPassword, newPassword}`) is GM self-service, from `my-account.html`
+  — requires knowing the current password (whatever the last reset issued),
+  not just an active session, so an unlocked device alone can't take over the
+  account. Min 6 characters, no other complexity rules (small friend-group
+  hobby app, not worth the UX friction).
+- Password hashes never leave the Worker in any API response, including to
+  commissioner tooling — `GET /fantasy/gms?full=1` returns `hasPassword`
+  (boolean) instead. Because of that, `PUT /fantasy/gms` (the roster editor's
+  save) merges each incoming row against the *previously stored* entry by
+  `id` to preserve `passwordHash`/`passwordSalt` server-side — the client
+  literally cannot round-trip a hash it was never given, so without this
+  merge, saving the roster for an unrelated reason (e.g. adding a new GM)
+  would silently wipe everyone else's password.
+- `my-account.html` — new standalone GM-only page (same login pattern as
+  `my-board.html`: direct `?gm=&token=` link, shared `localStorage` session,
+  or a manual login form with both password and token options) for changing
+  your own password. Reachable via the GM Tools dropdown in `index.html`.
 
 **Turn order is derived, never stored** — `computeTurn()` in `worker.js`
 recomputes the on-the-clock GM from `picks.length` and `draftOrder` (snake:

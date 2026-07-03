@@ -103,6 +103,9 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 .error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
 .hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
+.login-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
 .site-nav {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 10px 0; margin-bottom: 6px; font-family: 'Oswald', sans-serif;
@@ -151,6 +154,13 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 .gm-editor-row input { flex: 1; }
 .token-link-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .token-link { font-size: 10px; color: var(--cyan); word-break: break-all; flex: 1; }
+
+.pw-reveal-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  padding: 8px 10px; border-radius: 6px;
+  background: rgba(53,212,136,0.08); border: 1px solid rgba(53,212,136,0.35);
+}
+.pw-reveal-row .pw-text { flex: 1; font-size: 12px; color: var(--green); word-break: break-all; }
 
 .roster-order-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 4px;
@@ -372,6 +382,24 @@ async function loginAsGm() {
   }
 }
 
+async function loginAsGmWithPassword() {
+  const email = document.getElementById('gm-email').value.trim();
+  const password = document.getElementById('gm-password').value;
+  const errEl = document.getElementById('gm-password-login-error');
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
+  try {
+    const v = await apiFetch('/fantasy/gms/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+    state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = v.token;
+    saveGmSession();
+    setStatus(`Logged in as ${state.gmName}`);
+    loadGmExtras();
+    startPolling();
+  } catch (e) {
+    errEl.textContent = 'Incorrect email or password.';
+  }
+}
+
 async function loginAsCommish() {
   const key = document.getElementById('commish-key').value;
   const errEl = document.getElementById('commish-login-error');
@@ -479,17 +507,59 @@ async function saveGmRows() {
   const rows = commishGmRows.map((r, i) => ({
     id: (document.getElementById('gm-id-'+i).value || '').trim(),
     name: (document.getElementById('gm-name-'+i).value || '').trim(),
+    email: (document.getElementById('gm-email-'+i).value || '').trim(),
     token: r.token,
     active: true,
   }));
   if (rows.some(r => !r.id || !r.name)) { errEl.textContent = 'Every GM needs both an id and a name.'; return; }
   try {
     await commishFetch('/fantasy/gms', 'PUT', rows);
-    commishGmRows = rows;
+    // The server never sends password hashes back (see the GET handler), so
+    // merge the saved fields into the working copy rather than replacing it —
+    // that keeps each row's hasPassword flag intact instead of losing it.
+    commishGmRows = commishGmRows.map((r, i) => ({ ...r, ...rows[i] }));
     state.gmsPublic = await publicGet('/fantasy/gms');
     errEl.textContent = '';
     render();
   } catch (e) { errEl.textContent = e.message; }
+}
+
+async function resetGmPassword(idx) {
+  const r = commishGmRows[idx];
+  if (!r.id) { alert('Save this GM with an id first.'); return; }
+  if (!confirm(`Reset ${r.name || r.id}'s password? Their old password (if any) stops working immediately.`)) return;
+  try {
+    const result = await commishFetch('/fantasy/gms/reset-password', 'POST', { gmId: r.id });
+    commishGmRows[idx].hasPassword = true;
+    commishGmRows[idx].revealedPassword = result.newPassword;
+    render();
+  } catch (e) {
+    alert('Could not reset password: ' + e.message);
+  }
+}
+function hideGmPassword(idx) {
+  delete commishGmRows[idx].revealedPassword;
+  render();
+}
+async function copyGmPassword(idx, btn) {
+  const password = commishGmRows[idx].revealedPassword;
+  if (!password) return;
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(password);
+    btn.textContent = 'Copied!';
+  } catch (e) {
+    const el = document.getElementById('gm-revealed-pw-' + idx);
+    if (el) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      btn.textContent = 'Selected';
+    }
+  }
+  setTimeout(() => { btn.textContent = original; }, 1500);
 }
 
 async function savePlayerPool() {
@@ -595,6 +665,13 @@ function attachLandingHandlers() {
     document.getElementById('login-forms').innerHTML = `
       <div class="card">
         <div class="card-title">GM Login</div>
+        <div class="field"><label>Email</label><input type="text" id="gm-email"></div>
+        <div class="field"><label>Password</label><input type="password" id="gm-password"></div>
+        <button class="btn btn-primary" id="gm-password-login-btn">Log In</button>
+        <div class="error-msg" id="gm-password-login-error"></div>
+
+        <div class="login-divider"><span>or use your commissioner-issued link/token</span></div>
+
         <div class="field"><label>Your Name</label>
           <select id="gm-select">
             <option value="">Select...</option>
@@ -602,10 +679,11 @@ function attachLandingHandlers() {
           </select>
         </div>
         <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
-        <button class="btn btn-primary" id="gm-login-btn">Log In</button>
+        <button class="btn" id="gm-login-btn">Log In With Token</button>
         <div class="error-msg" id="gm-login-error"></div>
       </div>`;
     document.getElementById('gm-login-btn').onclick = loginAsGm;
+    document.getElementById('gm-password-login-btn').onclick = loginAsGmWithPassword;
   };
   document.getElementById('choose-commish').onclick = () => {
     document.getElementById('login-forms').innerHTML = `
@@ -840,10 +918,24 @@ function renderGmRegistryPanel() {
               <input type="text" id="gm-name-${i}" placeholder="Display name" value="${r.name}">
               <button class="btn btn-sm" data-remove-gm="${i}">✕</button>
             </div>
+            <div class="gm-editor-row">
+              <input type="text" id="gm-email-${i}" placeholder="Email (for password login)" value="${r.email || ''}">
+            </div>
             <div class="token-link-row">
               <div class="token-link" id="gm-link-${i}">${gmLinkFor(r)}</div>
               <button class="btn btn-sm" data-copy-link="${i}" ${r.id ? '' : 'disabled title="Enter an id first"'}>Copy</button>
             </div>
+            <div class="token-link-row">
+              <div class="token-link" style="color:var(--text-mute)">${r.hasPassword ? 'Password is set' : 'No password set yet'}</div>
+              <button class="btn btn-sm" data-reset-pw="${i}">Reset Password</button>
+            </div>
+            ${r.revealedPassword ? `
+              <div class="pw-reveal-row">
+                <div class="pw-text">New password: <strong id="gm-revealed-pw-${i}">${r.revealedPassword}</strong></div>
+                <button class="btn btn-sm" data-copy-pw="${i}">Copy</button>
+                <button class="btn btn-sm" data-hide-pw="${i}">Hide</button>
+              </div>
+            ` : ''}
           `).join('')}</div>
           <div class="btn-row">
             <button class="btn btn-sm" id="add-gm-btn">+ Add GM</button>
@@ -901,6 +993,15 @@ function attachCommishHandlers() {
     });
     document.querySelectorAll('[data-copy-link]').forEach(btn => {
       btn.onclick = () => copyGmLink(parseInt(btn.dataset.copyLink), btn);
+    });
+    document.querySelectorAll('[data-reset-pw]').forEach(btn => {
+      btn.onclick = () => resetGmPassword(parseInt(btn.dataset.resetPw));
+    });
+    document.querySelectorAll('[data-copy-pw]').forEach(btn => {
+      btn.onclick = () => copyGmPassword(parseInt(btn.dataset.copyPw), btn);
+    });
+    document.querySelectorAll('[data-hide-pw]').forEach(btn => {
+      btn.onclick = () => hideGmPassword(parseInt(btn.dataset.hidePw));
     });
   }
 

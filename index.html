@@ -123,6 +123,7 @@
       <div class="tab-dropdown" id="gm-tools-dropdown">
         <button class="active" data-tab="scouting">Scouting</button>
         <button data-tab="my-board">My Draft Board</button>
+        <button data-tab="my-account">My Account</button>
       </div>
     </div>
     <button data-tab="live-draft">Live Draft</button>
@@ -140,7 +141,7 @@
   const gmToolsDropdown = document.getElementById('gm-tools-dropdown');
   const topLevelTabs = document.querySelectorAll('nav.tabs > button[data-tab]');
   const gmToolsItems = gmToolsDropdown.querySelectorAll('button[data-tab]');
-  const gmToolsTabNames = ['scouting', 'my-board'];
+  const gmToolsTabNames = ['scouting', 'my-board', 'my-account'];
 
   function setActiveTab(btn) {
     if (btn.disabled || btn.classList.contains('active')) return;

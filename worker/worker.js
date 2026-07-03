@@ -43,10 +43,34 @@ function requireScorekeeper(request, env) {
 }
 
 function stripTokens(gms) {
-  return gms.map(({ token, ...rest }) => rest);
+  return gms.map(({ token, email, passwordHash, passwordSalt, ...rest }) => rest);
 }
 
 function r1(n) { return Math.round(n * 10) / 10; }
+
+// ── Password hashing (PBKDF2 via Workers' built-in Web Crypto — no external
+// dependency, keeps worker.js a single dependency-free file) ────────────────
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+async function verifyPassword(password, salt, hash) {
+  return (await hashPassword(password, salt)) === hash;
+}
+// word-word-number — easy to read aloud or paste into a text message when a
+// commissioner relays a reset password, unlike a random opaque string.
+const PASSWORD_WORDS = ['swift','tiger','coral','amber','delta','vivid','maple','quartz','nomad','ember','pixel','raven','solar','cobalt','fable','comet','harbor','willow','ridge','onyx'];
+function generatePassword() {
+  const w1 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  const w2 = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
+  const num = Math.floor(Math.random() * 90) + 10;
+  return `${w1}-${w2}-${num}`;
+}
 
 // Snake-draft turn order, derived entirely from picks already made — never
 // persisted, so it can't desync from the picks array that's the source of truth.
@@ -182,7 +206,9 @@ async function handleRequest(request, env) {
     const data = await env.FANTASY_DB.get('gm_registry', 'json') || [];
     if (url.searchParams.get('full') === '1') {
       if (!requireCommish(request, env)) return unauthorized();
-      return json(data);
+      // Password hashes never leave the Worker, even to commissioner tooling —
+      // the roster editor only needs to know whether one is set.
+      return json(data.map(({ passwordHash, passwordSalt, ...rest }) => ({ ...rest, hasPassword: !!passwordHash })));
     }
     return json(stripTokens(data));
   }
@@ -194,7 +220,21 @@ async function handleRequest(request, env) {
     for (const gm of body) {
       if (!gm.id || !gm.name || !gm.token) return badRequest('Every GM needs id, name, and token');
     }
-    await env.FANTASY_DB.put('gm_registry', JSON.stringify(body));
+    // The roster editor never sees password hashes (see GET above), so it can
+    // never round-trip them — preserve each GM's existing passwordHash/Salt
+    // by id here rather than letting a routine roster save silently wipe it.
+    const existing = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const existingById = {};
+    for (const g of existing) existingById[g.id] = g;
+    const merged = body.map(gm => {
+      const prev = existingById[gm.id] || {};
+      return {
+        id: gm.id, name: gm.name, token: gm.token, active: gm.active !== false,
+        email: gm.email !== undefined ? gm.email : prev.email,
+        passwordHash: prev.passwordHash, passwordSalt: prev.passwordSalt,
+      };
+    });
+    await env.FANTASY_DB.put('gm_registry', JSON.stringify(merged));
     return json({ ok: true });
   }
 
@@ -204,6 +244,59 @@ async function handleRequest(request, env) {
     const gm = gms.find(g => g.id === body.gmId);
     if (!gm || !body.token || gm.token !== body.token) return unauthorized('Invalid GM credentials');
     return json({ ok: true, id: gm.id, name: gm.name });
+  }
+
+  // Email+password is an alternate front door onto the exact same session
+  // token the shareable-link flow already uses — every other GM-authenticated
+  // endpoint still just checks X-GM-Token, unchanged.
+  if (path === '/fantasy/gms/login' && method === 'POST') {
+    const body = await request.json();
+    const { email, password } = body;
+    if (!email || !password) return badRequest('email and password are required');
+    const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const gm = gms.find(g => g.email && g.email.toLowerCase() === String(email).toLowerCase());
+    if (!gm || !gm.passwordHash || !(await verifyPassword(password, gm.passwordSalt, gm.passwordHash))) {
+      return unauthorized('Invalid email or password');
+    }
+    return json({ ok: true, id: gm.id, name: gm.name, token: gm.token });
+  }
+
+  // Commissioner-only recovery path — no email sending required. Generates
+  // and returns a new password once; the commissioner relays it out of band.
+  if (path === '/fantasy/gms/reset-password' && method === 'POST') {
+    if (!requireCommish(request, env)) return unauthorized();
+    const body = await request.json();
+    const { gmId } = body;
+    if (!gmId) return badRequest('gmId is required');
+    const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const gm = gms.find(g => g.id === gmId);
+    if (!gm) return notFound('No GM with id ' + gmId);
+    const newPassword = generatePassword();
+    gm.passwordSalt = crypto.randomUUID();
+    gm.passwordHash = await hashPassword(newPassword, gm.passwordSalt);
+    await env.FANTASY_DB.put('gm_registry', JSON.stringify(gms));
+    return json({ ok: true, newPassword });
+  }
+
+  // GM self-service — requires knowing the current password (whatever the
+  // commissioner's last reset issued), not just an active token/session, so
+  // someone at an unlocked device can't silently take over the account.
+  if (path === '/fantasy/gms/change-password' && method === 'POST') {
+    const gmToken = request.headers.get('X-GM-Token');
+    const body = await request.json();
+    const { gmId, currentPassword, newPassword } = body;
+    if (!gmId || !currentPassword || !newPassword) return badRequest('gmId, currentPassword, and newPassword are required');
+    if (newPassword.length < 6) return badRequest('New password must be at least 6 characters');
+    const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const gm = gms.find(g => g.id === gmId);
+    if (!gm || !gmToken || gm.token !== gmToken) return unauthorized('Invalid GM credentials');
+    if (!gm.passwordHash || !(await verifyPassword(currentPassword, gm.passwordSalt, gm.passwordHash))) {
+      return unauthorized('Current password is incorrect');
+    }
+    gm.passwordSalt = crypto.randomUUID();
+    gm.passwordHash = await hashPassword(newPassword, gm.passwordSalt);
+    await env.FANTASY_DB.put('gm_registry', JSON.stringify(gms));
+    return json({ ok: true });
   }
 
   if (path.startsWith('/fantasy/results/') && method === 'GET') {
