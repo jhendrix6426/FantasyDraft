@@ -336,6 +336,19 @@ async function handleRequest(request, env) {
     return json({ ok: true, ...state, ...computeTurn(state.draftOrder, state.picks, state.rosterSize) });
   }
 
+  // Full hard reset back to pre-draft — for rehearsing a draft on the real
+  // year and then clearing it before the actual event. Only touches
+  // livedraft_<year> (draft order/roster size/pool/picks); GM roster/tokens
+  // and each GM's private board (board_<year>_<gmId>) are untouched, so a
+  // rehearsal's board work carries forward into the real draft.
+  if (path.endsWith('/reset') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
+    if (!requireCommish(request, env)) return unauthorized();
+    const year = parts[3];
+    const state = defaultLivedraft(year);
+    await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
+    return json({ ok: true, ...state, ...computeTurn([], [], 0) });
+  }
+
   if (path.endsWith('/pick') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
     const year = parts[3];
     const gmToken = request.headers.get('X-GM-Token');
@@ -374,6 +387,38 @@ async function handleRequest(request, env) {
     state.updatedAt = Date.now();
     await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
     return json({ ok: true, pick, ...state, ...newTurn });
+  }
+
+  // ── GM draft boards ─────────────────────────────────────────
+  // A GM's private, pre-ranked wishlist for a draft — never exposed via the
+  // public /fantasy/livedraft/:year response (that's read by every GM and the
+  // broadcast view), only fetchable by that GM's own token. Usable before the
+  // draft starts (so a GM can build it ahead of time) and during it.
+  if (path.endsWith('/board') && path.startsWith('/fantasy/livedraft/') && method === 'GET') {
+    const year = parts[3];
+    const gmId = url.searchParams.get('gmId');
+    const gmToken = request.headers.get('X-GM-Token');
+    if (!gmId) return badRequest('gmId query param is required');
+    const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const gm = gms.find(g => g.id === gmId);
+    if (!gm || !gmToken || gm.token !== gmToken) return unauthorized('Invalid GM credentials');
+    const board = await env.FANTASY_DB.get(`board_${year}_${gmId}`, 'json') || [];
+    return json({ ok: true, board });
+  }
+
+  if (path.endsWith('/board') && path.startsWith('/fantasy/livedraft/') && method === 'PUT') {
+    const year = parts[3];
+    const gmToken = request.headers.get('X-GM-Token');
+    const body = await request.json();
+    const { gmId, board } = body;
+    if (!gmId || !Array.isArray(board) || !board.every(n => typeof n === 'string')) {
+      return badRequest('gmId and board (array of player names) are required');
+    }
+    const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
+    const gm = gms.find(g => g.id === gmId);
+    if (!gm || !gmToken || gm.token !== gmToken) return unauthorized('Invalid GM credentials');
+    await env.FANTASY_DB.put(`board_${year}_${gmId}`, JSON.stringify(board));
+    return json({ ok: true, board });
   }
 
   // ── Live scoring ────────────────────────────────────────────

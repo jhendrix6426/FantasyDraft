@@ -86,24 +86,25 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .row > * { flex: 1; min-width: 160px; }
 
-button.btn {
+.btn {
+  display: inline-block; text-decoration: none; text-align: center;
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
   font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px;
   text-transform: uppercase; letter-spacing: 1px; padding: 10px 18px;
   border-radius: 100px; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
 }
-button.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
-button.btn:disabled { opacity: .4; cursor: default; }
-button.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
-button.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
-button.btn-sm { padding: 6px 12px; font-size: 10px; }
+.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 10px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
 .error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
 .hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
 .landing-choice { display: flex; gap: 14px; flex-wrap: wrap; }
-.landing-choice button { flex: 1; min-width: 200px; padding: 24px; }
+.landing-choice button, .landing-choice a.btn { flex: 1; min-width: 200px; padding: 24px; }
 
 .clock-banner {
   border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
@@ -147,6 +148,19 @@ button.btn-sm { padding: 6px 12px; font-size: 10px; }
 }
 .roster-order-item .pos { color: var(--gold); font-weight: 700; width: 20px; }
 
+.board-list { max-height: 420px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 4px; }
+.board-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border-soft);
+}
+.board-row:last-child { border-bottom: none; }
+.board-row.taken { opacity: 0.45; }
+.board-row.taken .board-name { text-decoration: line-through; }
+.board-rank { color: var(--gold); font-weight: 700; width: 22px; flex-shrink: 0; }
+.board-name-wrap { flex: 1; min-width: 0; }
+.board-name { font-weight: 600; }
+.board-status { color: var(--text-mute); font-size: 10px; }
+
 .logout-link { color: var(--text-mute); font-size: 11px; cursor: pointer; text-decoration: underline; }
 .logout-link:hover { color: var(--text); }
 </style>
@@ -173,6 +187,8 @@ const state = {
   commishKey: null,
   livedraft: null,      // last fetched /fantasy/livedraft/:year response
   gmsPublic: [],        // [{id,name,active}]
+  playerPool: [],       // full year pool, fetched independent of draft status so a GM can board-build pre-draft
+  board: [],            // this GM's own ranked wishlist (private, [names in rank order])
   pollTimer: null,
   submitting: false,
   error: null,
@@ -226,6 +242,18 @@ function startPolling() {
   fetchLivedraft();
   state.pollTimer = setInterval(fetchLivedraft, 3000);
 }
+
+// Board-building needs the full year pool independent of draft status (the
+// draft's own playerPool snapshot doesn't exist until the commissioner hits
+// Start), plus this GM's own saved board. Loaded once at login, not polled.
+async function loadGmExtras() {
+  try { state.playerPool = await publicGet(`/fantasy/players/${state.year}`); } catch (e) { state.playerPool = []; }
+  try {
+    const r = await gmFetch(`/fantasy/livedraft/${state.year}/board?gmId=${encodeURIComponent(state.gmId)}`, 'GET');
+    state.board = r.board || [];
+  } catch (e) { state.board = []; }
+  render();
+}
 function stopPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = null;
@@ -252,6 +280,7 @@ async function init() {
       state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = linkToken;
       saveGmSession();
       setStatus(`Logged in as ${state.gmName}`);
+      loadGmExtras();
       startPolling();
       return;
     } catch (e) { /* fall through to normal login */ }
@@ -261,6 +290,7 @@ async function init() {
   if (savedGm && savedGm.year === state.year) {
     state.role = 'gm'; state.gmId = savedGm.gmId; state.gmToken = savedGm.gmToken; state.gmName = savedGm.gmName;
     setStatus(`Logged in as ${state.gmName}`);
+    loadGmExtras();
     startPolling();
     return;
   }
@@ -289,6 +319,7 @@ async function loginAsGm() {
     state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = token;
     saveGmSession();
     setStatus(`Logged in as ${state.gmName}`);
+    loadGmExtras();
     startPolling();
   } catch (e) {
     errEl.textContent = 'That token doesn\'t match — check with the commissioner.';
@@ -325,6 +356,31 @@ async function submitPick(playerName) {
   }
   state.submitting = false;
   await fetchLivedraft();
+}
+
+// ── GM draft board ──────────────────────────────────────────────
+async function saveBoard() {
+  try {
+    await gmFetch(`/fantasy/livedraft/${state.year}/board`, 'PUT', { gmId: state.gmId, board: state.board });
+  } catch (e) { /* board still reflects locally; next edit will retry the save */ }
+}
+function addToBoard(name) {
+  if (!name || state.board.includes(name)) return;
+  state.board.push(name);
+  render();
+  saveBoard();
+}
+function removeFromBoard(idx) {
+  state.board.splice(idx, 1);
+  render();
+  saveBoard();
+}
+function moveBoard(idx, dir) {
+  const j = idx + dir;
+  if (j < 0 || j >= state.board.length) return;
+  [state.board[idx], state.board[j]] = [state.board[j], state.board[idx]];
+  render();
+  saveBoard();
 }
 
 // ── Commissioner actions ──────────────────────────────────────
@@ -422,6 +478,13 @@ async function undoPick() {
   if (!confirm('Undo the most recent pick?')) return;
   await commishFetch(`/fantasy/livedraft/${state.year}/undo`, 'POST'); await fetchLivedraft();
 }
+async function resetDraft() {
+  const typed = prompt(`This wipes the draft order, roster size, player pool, and all picks for ${state.year} back to pre-draft — GM boards and roster/tokens are untouched. Type the year (${state.year}) to confirm.`);
+  if (typed !== String(state.year)) return;
+  await commishFetch(`/fantasy/livedraft/${state.year}/reset`, 'POST');
+  draftOrderRows = null;
+  await fetchLivedraft();
+}
 
 function addToDraftOrder(gmId) {
   if (!draftOrderRows) draftOrderRows = [];
@@ -475,6 +538,7 @@ function renderLanding() {
     <div class="landing-choice">
       <button class="btn" id="choose-gm">I'm a GM</button>
       <button class="btn" id="choose-commish">I'm the Commissioner</button>
+      <a class="btn" href="draft-presentation.html?year=${state.year}" target="_blank">Just Watching</a>
     </div>
     <div id="login-forms"></div>
   `;
@@ -510,13 +574,18 @@ function attachLandingHandlers() {
 
 function renderGmView() {
   const ld = state.livedraft;
+  const picked = new Set(ld ? ld.picks.map(p => p.player) : []);
+  const pickerOf = {};
+  if (ld) for (const p of ld.picks) pickerOf[p.player] = p.gm;
+
   if (!ld || ld.status === 'pre') {
-    return `<div class="card"><div class="card-title">Waiting</div>The commissioner hasn't started the draft yet. This page will update automatically.</div>` + renderLogout();
+    return `<div class="card"><div class="card-title">Waiting</div>The commissioner hasn't started the draft yet. Build your draft board below — it'll be ready to draft from the moment the clock starts.</div>` +
+      renderBoardPanel(picked, pickerOf, false) + renderLogout();
   }
   const isMine = ld.onTheClock === state.gmId;
-  const picked = new Set(ld.picks.map(p => p.player));
   const available = (ld.playerPool || []).filter(p => !picked.has(p.name));
   const myRoster = ld.picks.filter(p => p.gm === state.gmId);
+  const canDraftFromBoard = !ld.isComplete && ld.status === 'active' && isMine;
 
   const clockHtml = ld.isComplete
     ? `<div class="clock-banner"><div class="who">Draft Complete</div></div>`
@@ -535,6 +604,7 @@ function renderGmView() {
   return `
     ${clockHtml}
     ${playersHtml}
+    ${renderBoardPanel(picked, pickerOf, canDraftFromBoard)}
     <div class="card">
       <div class="card-title">Your Roster (${myRoster.length}/${ld.rosterSize})</div>
       ${myRoster.length ? myRoster.map(p => `<div class="feed-item"><span class="feed-pick">${p.player}</span><span class="feed-gm">Pick ${p.pickNumber}</span></div>`).join('') : '<div class="hint">No picks yet.</div>'}
@@ -546,6 +616,46 @@ function renderGmView() {
     ${state.error ? `<div class="error-msg">${state.error}</div>` : ''}
     ${renderLogout()}
   `;
+}
+
+function renderBoardPanel(picked, pickerOf, canDraftFromBoard) {
+  const pool = state.playerPool || [];
+  const poolByName = {};
+  for (const p of pool) poolByName[p.name] = p;
+  const board = state.board || [];
+  const onBoard = new Set(board);
+  const addOptions = pool.filter(p => !onBoard.has(p.name)).sort((a, b) => a.name.localeCompare(b.name));
+
+  const rows = board.length ? board.map((name, i) => {
+    const p = poolByName[name];
+    const isPicked = picked.has(name);
+    const fmts = p ? [p.thu, p.fri, p.sat].filter(Boolean).join(' · ') : '';
+    const status = isPicked ? `taken by ${gmName(pickerOf[name])}` : fmts;
+    return `
+      <div class="board-row ${isPicked ? 'taken' : ''}">
+        <span class="board-rank">${i + 1}.</span>
+        <div class="board-name-wrap">
+          <div class="board-name">${name}</div>
+          <div class="board-status">${status}</div>
+        </div>
+        ${(!isPicked && canDraftFromBoard) ? `<button class="btn btn-sm btn-primary board-draft-btn" data-name="${name.replace(/"/g, '&quot;')}" ${state.submitting ? 'disabled' : ''}>Draft</button>` : ''}
+        <button class="btn btn-sm" data-board-move="-1" data-idx="${i}">↑</button>
+        <button class="btn btn-sm" data-board-move="1" data-idx="${i}">↓</button>
+        <button class="btn btn-sm" data-board-remove="${i}">✕</button>
+      </div>`;
+  }).join('') : '<div class="hint">Your board is empty — add players below to start ranking them.</div>';
+
+  return `
+    <div class="card">
+      <div class="card-title">My Draft Board <span style="color:var(--text-mute);font-weight:normal;text-transform:none;letter-spacing:0">(private — only you see this)</span></div>
+      <div class="board-list">${rows}</div>
+      <div class="field" style="margin-top:12px">
+        <select id="board-add-select">
+          <option value="">Add player to board...</option>
+          ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
 }
 
 function renderPlayerRows(list, filter) {
@@ -582,6 +692,18 @@ function attachGmHandlers() {
   attachDraftButtons();
   const logout = document.getElementById('logout-link');
   if (logout) logout.onclick = clearSession;
+
+  const boardAdd = document.getElementById('board-add-select');
+  if (boardAdd) boardAdd.onchange = () => { if (boardAdd.value) addToBoard(boardAdd.value); };
+  document.querySelectorAll('[data-board-move]').forEach(btn => {
+    btn.onclick = () => moveBoard(parseInt(btn.dataset.idx), parseInt(btn.dataset.boardMove));
+  });
+  document.querySelectorAll('[data-board-remove]').forEach(btn => {
+    btn.onclick = () => removeFromBoard(parseInt(btn.dataset.boardRemove));
+  });
+  document.querySelectorAll('.board-draft-btn').forEach(btn => {
+    btn.onclick = () => submitPick(btn.dataset.name);
+  });
 }
 function attachDraftButtons() {
   document.querySelectorAll('.draft-btn').forEach(btn => {
@@ -607,12 +729,17 @@ function renderCommishView() {
           ${ld.status === 'active' ? '<button class="btn" id="pause-btn">Pause</button>' : ''}
           ${ld.status === 'paused' ? '<button class="btn" id="resume-btn">Resume</button>' : ''}
           <button class="btn" id="undo-btn" ${!ld.picks.length ? 'disabled' : ''}>Undo Last Pick</button>
-          <a class="btn" href="draft-presentation.html?year=${state.year}" target="_blank" style="text-decoration:none;display:inline-block">Open Presentation View</a>
+          <a class="btn" href="draft-presentation.html?year=${state.year}" target="_blank">Open Presentation View</a>
         </div>
       </div>
       <div class="card">
         <div class="card-title">Pick Feed</div>
         <div class="feed">${renderFeed(ld.picks)}</div>
+      </div>
+      <div class="card" style="border-color: var(--red-dim)">
+        <div class="card-title" style="color: var(--red)">Danger Zone</div>
+        <div class="hint" style="margin-bottom:10px">Wipes draft order, roster size, player pool, and all picks back to pre-draft — for clearing a rehearsal run before the real event. GM roster/tokens and boards are untouched.</div>
+        <button class="btn" id="reset-draft-btn" style="border-color: var(--red); color: var(--red)">Reset Draft to Pre-Draft</button>
       </div>
     `);
   }
@@ -702,6 +829,7 @@ function attachCommishHandlers() {
   const pause = document.getElementById('pause-btn'); if (pause) pause.onclick = pauseDraft;
   const resume = document.getElementById('resume-btn'); if (resume) resume.onclick = resumeDraft;
   const undo = document.getElementById('undo-btn'); if (undo) undo.onclick = undoPick;
+  const reset = document.getElementById('reset-draft-btn'); if (reset) reset.onclick = resetDraft;
 
   const startBtn = document.getElementById('start-draft-btn'); if (startBtn) startBtn.onclick = startDraft;
   const addOrder = document.getElementById('add-order-select');

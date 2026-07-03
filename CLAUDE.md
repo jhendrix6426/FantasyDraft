@@ -145,6 +145,10 @@ confuse the two):
   auth) returns them, for the roster editor in `live-draft.html`. Commissioner
   UI generates each GM a shareable link (`live-draft.html?gm=id&token=...`)
   rather than making them type a token.
+- No auth for spectators: `live-draft.html`'s landing screen has a third
+  "Just Watching" option alongside GM/Commissioner that just links straight
+  to `draft-presentation.html?year=...` — for anyone who wants to follow
+  along without a GM token or commish key.
 
 **Turn order is derived, never stored** — `computeTurn()` in `worker.js`
 recomputes the on-the-clock GM from `picks.length` and `draftOrder` (snake:
@@ -171,6 +175,31 @@ almost immediately.
 `PLAYERS` shape) into `live-draft.html`'s Player Pool panel, which `PUT`s it to
 `/fantasy/players/:year`. There's no automatic sync from `scouting.html`'s
 hardcoded `PLAYERS` array — copy/paste it manually before a draft.
+`GET /fantasy/players/:year` is public (no auth), which is what lets a GM's
+own draft board (below) work before the draft has even started.
+
+**GM draft boards**: each GM can pre-rank a private wishlist of players from
+their own `live-draft.html?gm=...&token=...` link, usable both before the
+commissioner starts the draft and during it. Stored server-side (not
+`localStorage`) at KV key `board_<year>_<gmId>`, authenticated the same way
+picks are (`X-GM-Token`), via `GET/PUT /fantasy/livedraft/:year/board` — this
+is deliberate so the board follows the GM's link to whatever device they
+actually draft from, not just the device they built it on. It's never
+included in the public `/fantasy/livedraft/:year` response (that's read by
+every GM and the broadcast view), only fetchable with that GM's own token, so
+one GM's strategy stays invisible to the others. When it's that GM's turn,
+board rows for still-available players get an inline Draft button, so the
+board doubles as a fast-pick tool, not just a reference list.
+
+**Resetting a draft**: `POST /fantasy/livedraft/:year/reset` (commish auth)
+hard-resets `livedraft_<year>` back to the pre-draft default (no draft order,
+roster size, player pool, or picks) — wired to a "Reset Draft to Pre-Draft"
+button in the commissioner's Danger Zone panel, gated by typing the year to
+confirm. It deliberately does **not** touch `gm_registry` or any
+`board_<year>_<gmId>` entries, so the commissioner can rehearse a full mock
+draft on the real year with the real GM links, then reset cleanly right
+before the actual event without invalidating anyone's link or wiping the
+boards they built during the rehearsal.
 
 **Deploying worker changes**: `cd worker && wrangler deploy` (manual, no CI —
 matches how the rest of this project deploys).
