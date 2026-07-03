@@ -256,6 +256,25 @@ one GM's strategy stays invisible to the others. When it's that GM's turn,
 board rows for still-available players get an inline Draft button, so the
 board doubles as a fast-pick tool, not just a reference list.
 
+On `live-draft.html` itself, the board renders in two places sharing one
+`renderBoardRow()` helper so they can't drift apart: an inline preview
+(top `BOARD_PREVIEW_SIZE` players, no reorder/remove — just Draft when
+eligible) so it doesn't dominate the main draft screen, and a "See Full
+Draft Board" button opening the complete ranked list (with reorder/remove)
+in a modal. The modal (`#board-modal-bg`) is deliberately placed **outside**
+`#app` in the DOM, not inside it — `render()` replaces `#app`'s entire
+`innerHTML` on every poll/pick/board edit, which would otherwise blow away
+the modal's open/closed state each time. Because it lives outside `#app`,
+nothing refreshes its content automatically, so `render()` explicitly calls
+`renderBoardModalContent()` at the end whenever the modal is open, and
+`isInteractingWithForm()` (see the polling note above) checks both `#app`
+*and* `#board-modal-bg` for focus — without that second check, a background
+poll could destroy the modal's own "add player" `<select>` mid-click, the
+exact bug that check exists to prevent elsewhere. This replaced a plain
+"Open as Standalone Page" link out to `my-board.html`, which is still
+reachable on its own via the GM Tools dropdown or `scouting.html`'s hero
+pill — it just isn't linked from `live-draft.html` directly anymore.
+
 A GM's session (`{gmId, gmToken, gmName, year}`) lives in `localStorage` under
 the key `livedraft-gm`, set on login in `live-draft.html` or `my-board.html`.
 Because `scouting.html`, `live-draft.html`, and `my-board.html` are all

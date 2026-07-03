@@ -162,6 +162,23 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 }
 .pw-reveal-row .pw-text { flex: 1; font-size: 12px; color: var(--green); word-break: break-all; }
 
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(4,4,6,.88); backdrop-filter: blur(2px); z-index: 1000; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 20px; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 640px; margin: auto; padding: 0; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.modal-head {
+  background: linear-gradient(120deg, rgba(255,52,80,0.16), var(--panel-2) 60%);
+  padding: 18px 22px; border-bottom: 1px solid var(--border); border-top: 3px solid var(--red);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.modal-title { color: var(--text); font-family: 'Oswald', sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.modal-close {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text-dim); padding: 5px 12px;
+  cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11px; flex-shrink: 0; border-radius: 100px;
+  transition: color .15s, border-color .15s;
+}
+.modal-close:hover { color: var(--red); border-color: var(--red); }
+.modal-body { padding: 18px 22px; max-height: 70vh; overflow-y: auto; }
+
 .roster-order-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 4px;
   background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 6px; font-size: 12px;
@@ -195,6 +212,16 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
   </header>
 
   <div id="app"></div>
+</div>
+
+<div class="modal-bg" id="board-modal-bg" onclick="if(event.target===this)closeBoardModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Full Draft Board</div>
+      <button class="modal-close" onclick="closeBoardModal()">Close ✕</button>
+    </div>
+    <div class="modal-body" id="board-modal-body"></div>
+  </div>
 </div>
 
 <script>
@@ -277,9 +304,13 @@ function clearSession() {
 // The next poll (or their own action) renders normally once they're done.
 function isInteractingWithForm() {
   const el = document.activeElement;
-  if (!el) return false;
+  if (!el || !['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return false;
   const app = document.getElementById('app');
-  return ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) && app.contains(el);
+  const modal = document.getElementById('board-modal-bg');
+  // The board modal lives outside #app (see the render() note below), so its
+  // own <select> needs the same protection or a background poll could
+  // destroy it mid-click exactly like the bug this guard already fixed once.
+  return (app && app.contains(el)) || (modal && modal.contains(el));
 }
 
 async function fetchLivedraft(isBackgroundPoll) {
@@ -648,6 +679,13 @@ function render() {
       }
     }
   }
+
+  // The board modal lives outside #app (so it survives the innerHTML swap
+  // above), which means nothing refreshes its content automatically — do it
+  // here so every render() call (poll, pick, board edit) keeps it in sync
+  // whenever it's actually open.
+  const modalBg = document.getElementById('board-modal-bg');
+  if (modalBg && modalBg.classList.contains('open')) renderBoardModalContent();
 }
 
 function renderLanding() {
@@ -705,7 +743,7 @@ function renderGmView() {
 
   if (!ld || ld.status === 'pre') {
     return `<div class="card"><div class="card-title">Waiting</div>The commissioner hasn't started the draft yet. Build your draft board below — it'll be ready to draft from the moment the clock starts.</div>` +
-      renderBoardPanel(picked, pickerOf, false) + renderLogout();
+      renderBoardPreview(picked, pickerOf, false) + renderLogout();
   }
   const isMine = ld.onTheClock === state.gmId;
   const available = (ld.playerPool || []).filter(p => !picked.has(p.name));
@@ -729,7 +767,7 @@ function renderGmView() {
   return `
     ${clockHtml}
     ${playersHtml}
-    ${renderBoardPanel(picked, pickerOf, canDraftFromBoard)}
+    ${renderBoardPreview(picked, pickerOf, canDraftFromBoard)}
     <div class="card">
       <div class="card-title">Your Roster (${myRoster.length}/${ld.rosterSize})</div>
       ${myRoster.length ? myRoster.map(p => `<div class="feed-item"><span class="feed-pick">${p.player}</span><span class="feed-gm">Pick ${p.pickNumber}</span></div>`).join('') : '<div class="hint">No picks yet.</div>'}
@@ -743,48 +781,113 @@ function renderGmView() {
   `;
 }
 
-function renderBoardPanel(picked, pickerOf, canDraftFromBoard) {
+// Shared by the inline preview (top 5, no reorder/remove) and the full-board
+// modal (everything) so the two never drift out of sync with each other.
+function renderBoardRow(name, i, poolByName, picked, pickerOf, canDraftFromBoard, fullControls) {
+  const p = poolByName[name];
+  const isPicked = picked.has(name);
+  const fmts = p ? [p.thu, p.fri, p.sat].filter(Boolean).join(' · ') : '';
+  const status = isPicked ? `taken by ${gmName(pickerOf[name])}` : fmts;
+  return `
+    <div class="board-row ${isPicked ? 'taken' : ''}">
+      <span class="board-rank">${i + 1}.</span>
+      <div class="board-name-wrap">
+        <div class="board-name">${name}</div>
+        <div class="board-status">${status}</div>
+      </div>
+      ${(!isPicked && canDraftFromBoard) ? `<button class="btn btn-sm btn-primary board-draft-btn" data-name="${name.replace(/"/g, '&quot;')}" ${state.submitting ? 'disabled' : ''}>Draft</button>` : ''}
+      ${fullControls ? `
+        <button class="btn btn-sm" data-board-move="-1" data-idx="${i}">↑</button>
+        <button class="btn btn-sm" data-board-move="1" data-idx="${i}">↓</button>
+        <button class="btn btn-sm" data-board-remove="${i}">✕</button>
+      ` : ''}
+    </div>`;
+}
+
+function boardAddOptions() {
+  const pool = state.playerPool || [];
+  const onBoard = new Set(state.board || []);
+  return pool.filter(p => !onBoard.has(p.name)).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const BOARD_PREVIEW_SIZE = 5;
+
+function renderBoardPreview(picked, pickerOf, canDraftFromBoard) {
   const pool = state.playerPool || [];
   const poolByName = {};
   for (const p of pool) poolByName[p.name] = p;
   const board = state.board || [];
-  const onBoard = new Set(board);
-  const addOptions = pool.filter(p => !onBoard.has(p.name)).sort((a, b) => a.name.localeCompare(b.name));
+  const preview = board.slice(0, BOARD_PREVIEW_SIZE);
 
-  const rows = board.length ? board.map((name, i) => {
-    const p = poolByName[name];
-    const isPicked = picked.has(name);
-    const fmts = p ? [p.thu, p.fri, p.sat].filter(Boolean).join(' · ') : '';
-    const status = isPicked ? `taken by ${gmName(pickerOf[name])}` : fmts;
-    return `
-      <div class="board-row ${isPicked ? 'taken' : ''}">
-        <span class="board-rank">${i + 1}.</span>
-        <div class="board-name-wrap">
-          <div class="board-name">${name}</div>
-          <div class="board-status">${status}</div>
-        </div>
-        ${(!isPicked && canDraftFromBoard) ? `<button class="btn btn-sm btn-primary board-draft-btn" data-name="${name.replace(/"/g, '&quot;')}" ${state.submitting ? 'disabled' : ''}>Draft</button>` : ''}
-        <button class="btn btn-sm" data-board-move="-1" data-idx="${i}">↑</button>
-        <button class="btn btn-sm" data-board-move="1" data-idx="${i}">↓</button>
-        <button class="btn btn-sm" data-board-remove="${i}">✕</button>
-      </div>`;
-  }).join('') : '<div class="hint">Your board is empty — add players below to start ranking them.</div>';
+  const rows = preview.length ? preview.map((name, i) => renderBoardRow(name, i, poolByName, picked, pickerOf, canDraftFromBoard, false)).join('')
+    : '<div class="hint">Your board is empty — add players below to start ranking them.</div>';
 
   return `
     <div class="card">
       <div class="card-title">My Draft Board <span style="color:var(--text-mute);font-weight:normal;text-transform:none;letter-spacing:0">(private — only you see this)</span></div>
       <div class="board-list">${rows}</div>
+      ${board.length > BOARD_PREVIEW_SIZE ? `<div class="hint">+${board.length - BOARD_PREVIEW_SIZE} more on your board</div>` : ''}
       <div class="field" style="margin-top:12px">
         <select id="board-add-select">
           <option value="">Add player to board...</option>
-          ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
+          ${boardAddOptions().map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
         </select>
       </div>
       <div class="btn-row" style="margin-top:12px">
-        <a class="btn btn-sm" href="my-board.html?year=${state.year}" target="_blank">Open as Standalone Page</a>
+        <button class="btn btn-sm" id="see-full-board-btn">See Full Draft Board</button>
       </div>
-      <div class="hint">Same board — useful for keeping it up on its own tab or device while you scout.</div>
     </div>`;
+}
+
+// Rendered into the static #board-modal-bg (outside #app, so it survives
+// every #app innerHTML rebuild) rather than through the normal render()
+// path — see the render()/isInteractingWithForm() notes for why.
+function renderBoardModalContent() {
+  const ld = state.livedraft;
+  const picked = new Set(ld ? ld.picks.map(p => p.player) : []);
+  const pickerOf = {};
+  if (ld) for (const p of ld.picks) pickerOf[p.player] = p.gm;
+  const canDraftFromBoard = !!ld && !ld.isComplete && ld.status === 'active' && ld.onTheClock === state.gmId;
+
+  const pool = state.playerPool || [];
+  const poolByName = {};
+  for (const p of pool) poolByName[p.name] = p;
+  const board = state.board || [];
+
+  const rows = board.length ? board.map((name, i) => renderBoardRow(name, i, poolByName, picked, pickerOf, canDraftFromBoard, true)).join('')
+    : '<div class="hint">Your board is empty — add players below to start ranking them.</div>';
+
+  document.getElementById('board-modal-body').innerHTML = `
+    <div class="board-list">${rows}</div>
+    <div class="field" style="margin-top:12px">
+      <select id="board-modal-add-select">
+        <option value="">Add player to board...</option>
+        ${boardAddOptions().map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+  `;
+  attachBoardModalHandlers();
+}
+
+function openBoardModal() {
+  document.getElementById('board-modal-bg').classList.add('open');
+  renderBoardModalContent();
+}
+function closeBoardModal() {
+  document.getElementById('board-modal-bg').classList.remove('open');
+}
+function attachBoardModalHandlers() {
+  const boardAdd = document.getElementById('board-modal-add-select');
+  if (boardAdd) boardAdd.onchange = () => { if (boardAdd.value) addToBoard(boardAdd.value); };
+  document.querySelectorAll('#board-modal-body [data-board-move]').forEach(btn => {
+    btn.onclick = () => moveBoard(parseInt(btn.dataset.idx), parseInt(btn.dataset.boardMove));
+  });
+  document.querySelectorAll('#board-modal-body [data-board-remove]').forEach(btn => {
+    btn.onclick = () => removeFromBoard(parseInt(btn.dataset.boardRemove));
+  });
+  document.querySelectorAll('#board-modal-body .board-draft-btn').forEach(btn => {
+    btn.onclick = () => submitPick(btn.dataset.name);
+  });
 }
 
 function renderPlayerRows(list, filter) {
@@ -818,15 +921,11 @@ function attachGmHandlers() {
 
   const boardAdd = document.getElementById('board-add-select');
   if (boardAdd) boardAdd.onchange = () => { if (boardAdd.value) addToBoard(boardAdd.value); };
-  document.querySelectorAll('[data-board-move]').forEach(btn => {
-    btn.onclick = () => moveBoard(parseInt(btn.dataset.idx), parseInt(btn.dataset.boardMove));
-  });
-  document.querySelectorAll('[data-board-remove]').forEach(btn => {
-    btn.onclick = () => removeFromBoard(parseInt(btn.dataset.boardRemove));
-  });
-  document.querySelectorAll('.board-draft-btn').forEach(btn => {
+  document.querySelectorAll('#app .board-draft-btn').forEach(btn => {
     btn.onclick = () => submitPick(btn.dataset.name);
   });
+  const seeFullBoard = document.getElementById('see-full-board-btn');
+  if (seeFullBoard) seeFullBoard.onclick = openBoardModal;
 }
 function attachDraftButtons() {
   document.querySelectorAll('.draft-btn').forEach(btn => {
