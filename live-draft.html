@@ -414,20 +414,20 @@ async function loginAsGm() {
 }
 
 async function loginAsGmWithPassword() {
-  const email = document.getElementById('gm-email').value.trim();
+  const username = document.getElementById('gm-username').value.trim();
   const password = document.getElementById('gm-password').value;
   const errEl = document.getElementById('gm-password-login-error');
   errEl.textContent = '';
-  if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
+  if (!username || !password) { errEl.textContent = 'Enter your username and password.'; return; }
   try {
-    const v = await apiFetch('/fantasy/gms/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+    const v = await apiFetch('/fantasy/gms/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
     state.role = 'gm'; state.gmId = v.id; state.gmName = v.name; state.gmToken = v.token;
     saveGmSession();
     setStatus(`Logged in as ${state.gmName}`);
     loadGmExtras();
     startPolling();
   } catch (e) {
-    errEl.textContent = 'Incorrect email or password.';
+    errEl.textContent = 'Incorrect username or password.';
   }
 }
 
@@ -538,7 +538,7 @@ async function saveGmRows() {
   const rows = commishGmRows.map((r, i) => ({
     id: (document.getElementById('gm-id-'+i).value || '').trim(),
     name: (document.getElementById('gm-name-'+i).value || '').trim(),
-    email: (document.getElementById('gm-email-'+i).value || '').trim(),
+    username: (document.getElementById('gm-username-'+i).value || '').trim(),
     token: r.token,
     active: true,
   }));
@@ -703,7 +703,7 @@ function attachLandingHandlers() {
     document.getElementById('login-forms').innerHTML = `
       <div class="card">
         <div class="card-title">GM Login</div>
-        <div class="field"><label>Email</label><input type="text" id="gm-email"></div>
+        <div class="field"><label>Username</label><input type="text" id="gm-username"></div>
         <div class="field"><label>Password</label><input type="password" id="gm-password"></div>
         <button class="btn btn-primary" id="gm-password-login-btn">Log In</button>
         <div class="error-msg" id="gm-password-login-error"></div>
@@ -1018,7 +1018,7 @@ function renderGmRegistryPanel() {
               <button class="btn btn-sm" data-remove-gm="${i}">✕</button>
             </div>
             <div class="gm-editor-row">
-              <input type="text" id="gm-email-${i}" placeholder="Email (for password login)" value="${r.email || ''}">
+              <input type="text" id="gm-username-${i}" placeholder="Username (for password login)" value="${r.username || ''}">
             </div>
             <div class="token-link-row">
               <div class="token-link" id="gm-link-${i}">${gmLinkFor(r)}</div>
@@ -1087,8 +1087,14 @@ function attachCommishHandlers() {
     commishGmRows.forEach((r, i) => {
       const idInp = document.getElementById('gm-id-'+i);
       const nameInp = document.getElementById('gm-name-'+i);
+      const usernameInp = document.getElementById('gm-username-'+i);
       if (idInp) idInp.oninput = () => { r.id = idInp.value; refreshGmLinkRow(i); };
       if (nameInp) nameInp.oninput = () => { r.name = nameInp.value; };
+      // Without this, any render() triggered by another action (add/remove a
+      // row, reset a password, even a poll) rebuilds this input from the
+      // stale in-memory r.username and silently discards whatever was typed
+      // but not yet saved — exactly the bug id/name already avoid above.
+      if (usernameInp) usernameInp.oninput = () => { r.username = usernameInp.value; };
     });
     document.querySelectorAll('[data-copy-link]').forEach(btn => {
       btn.onclick = () => copyGmLink(parseInt(btn.dataset.copyLink), btn);

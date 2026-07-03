@@ -177,14 +177,17 @@ confuse the two):
   to `draft-presentation.html?year=...` — for anyone who wants to follow
   along without a GM token or commish key.
 
-**Email+password is an alternate GM login, not a replacement for tokens.**
-A GM's `gm_registry` entry can carry `email` + `passwordHash`/`passwordSalt`
+**Username+password is an alternate GM login, not a replacement for tokens.**
+A GM's `gm_registry` entry can carry `username` + `passwordHash`/`passwordSalt`
 (PBKDF2, 100k iterations, via Workers' built-in `crypto.subtle` — no external
-dependency) alongside their existing `token`. `POST /fantasy/gms/login`
-(public — email+password) returns that same `token` on success, so every
-other GM-authenticated endpoint (`pick`, `board`, etc.) needs zero changes;
-password login is just a nicer front door onto the identical session. The
-shareable token link still works untouched and is the ultimate fallback.
+dependency) alongside their existing `token`. Deliberately called `username`,
+not `email` — there's no email-sending infrastructure in this project, and
+naming it `email` would have implied verification/recovery capabilities that
+don't exist. `POST /fantasy/gms/login` (public — username+password) returns
+that same `token` on success, so every other GM-authenticated endpoint
+(`pick`, `board`, etc.) needs zero changes; password login is just a nicer
+front door onto the identical session. The shareable token link still works
+untouched and is the ultimate fallback.
 - `POST /fantasy/gms/reset-password` (commish auth, body `{gmId}`) generates
   a new auto-generated `word-word-number` password (e.g. `swift-tiger-42` —
   easy to read aloud/text) and returns it **once**, for the commissioner to
@@ -391,9 +394,10 @@ via `oninput` — without both halves of that fix, the 3s poll loop steals
 focus and blanks the search box mid-keystroke, exactly like the bug already
 hit and fixed in the draft's commissioner GM-roster editor.
 
-**Two related bugs found during pre-event testing, both from the same root
-cause** (background polling rebuilding the page mid-interaction) **— fixed in
-`live-draft.html` and `my-board.html`:**
+**Three related bugs found during pre-event testing, all variations on the
+same root cause** (something rebuilds an input's DOM value from stale
+in-memory state while the user is mid-edit) **— fixed in `live-draft.html`
+and `my-board.html`:**
 - The GM player-search box wasn't actually model-synced (unlike
   `live-scoring.html`'s, which was correct from the start) — `renderGmView()`
   called `renderPlayerRows(available)` with no filter, so every 3s poll
@@ -413,6 +417,18 @@ cause** (background polling rebuilding the page mid-interaction) **— fixed in
   timer-driven background tick defers. If you add another poll loop or
   another dropdown/text field to either file, this guard already covers it —
   no per-widget patching needed.
+- The commissioner's GM Roster editor's `id`/`name` inputs each got an
+  `oninput` handler writing straight to the working `commishGmRows[i]` row so
+  a re-render reflects what's actually typed — but the `username` field (once
+  added for password login) was missed. Any *direct* action-triggered
+  render() — clicking "+ Add GM", "Reset Password" on any row, anything — not
+  just a background poll, rebuilds that input from the stale `r.username`
+  and silently discards whatever was typed but not yet saved. This one isn't
+  poll-timing-specific like the two above; it happens on the very next
+  render() regardless of cause, since nothing was capturing the typed value
+  at all. Fixed the same way as `id`/`name`: an `oninput` writing to
+  `r.username`. If you add another editable field to a GM row, it needs this
+  same handler, or it has this bug from day one.
 
 **Drafting a player requires confirming a native `confirm()` dialog** ("Draft
 {name}?") in `submitPick()` — covers both the main available-players list and

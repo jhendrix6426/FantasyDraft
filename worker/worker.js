@@ -43,7 +43,7 @@ function requireScorekeeper(request, env) {
 }
 
 function stripTokens(gms) {
-  return gms.map(({ token, email, passwordHash, passwordSalt, ...rest }) => rest);
+  return gms.map(({ token, username, passwordHash, passwordSalt, ...rest }) => rest);
 }
 
 function r1(n) { return Math.round(n * 10) / 10; }
@@ -230,7 +230,7 @@ async function handleRequest(request, env) {
       const prev = existingById[gm.id] || {};
       return {
         id: gm.id, name: gm.name, token: gm.token, active: gm.active !== false,
-        email: gm.email !== undefined ? gm.email : prev.email,
+        username: gm.username !== undefined ? gm.username : prev.username,
         passwordHash: prev.passwordHash, passwordSalt: prev.passwordSalt,
       };
     });
@@ -246,17 +246,17 @@ async function handleRequest(request, env) {
     return json({ ok: true, id: gm.id, name: gm.name });
   }
 
-  // Email+password is an alternate front door onto the exact same session
+  // Username+password is an alternate front door onto the exact same session
   // token the shareable-link flow already uses — every other GM-authenticated
   // endpoint still just checks X-GM-Token, unchanged.
   if (path === '/fantasy/gms/login' && method === 'POST') {
     const body = await request.json();
-    const { email, password } = body;
-    if (!email || !password) return badRequest('email and password are required');
+    const { username, password } = body;
+    if (!username || !password) return badRequest('username and password are required');
     const gms = await env.FANTASY_DB.get('gm_registry', 'json') || [];
-    const gm = gms.find(g => g.email && g.email.toLowerCase() === String(email).toLowerCase());
+    const gm = gms.find(g => g.username && g.username.toLowerCase() === String(username).toLowerCase());
     if (!gm || !gm.passwordHash || !(await verifyPassword(password, gm.passwordSalt, gm.passwordHash))) {
-      return unauthorized('Invalid email or password');
+      return unauthorized('Invalid username or password');
     }
     return json({ ok: true, id: gm.id, name: gm.name, token: gm.token });
   }

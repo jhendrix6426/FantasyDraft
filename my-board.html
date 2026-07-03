@@ -280,20 +280,20 @@ async function loginAsGm() {
 }
 
 async function loginAsGmWithPassword() {
-  const email = document.getElementById('gm-email').value.trim();
+  const username = document.getElementById('gm-username').value.trim();
   const password = document.getElementById('gm-password').value;
   const errEl = document.getElementById('gm-password-login-error');
   errEl.textContent = '';
-  if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
+  if (!username || !password) { errEl.textContent = 'Enter your username and password.'; return; }
   try {
-    const v = await apiFetch('/fantasy/gms/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+    const v = await apiFetch('/fantasy/gms/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
     state.gmId = v.id; state.gmName = v.name; state.gmToken = v.token;
     saveGmSession();
     setStatus(`Logged in as ${state.gmName}`);
     await loadBoardData();
     startPolling();
   } catch (e) {
-    errEl.textContent = 'Incorrect email or password.';
+    errEl.textContent = 'Incorrect username or password.';
   }
 }
 
@@ -338,7 +338,7 @@ function renderLogin() {
   return `
     <div class="card">
       <div class="card-title">GM Login</div>
-      <div class="field"><label>Email</label><input type="text" id="gm-email"></div>
+      <div class="field"><label>Username</label><input type="text" id="gm-username"></div>
       <div class="field"><label>Password</label><input type="password" id="gm-password"></div>
       <button class="btn btn-primary" id="gm-password-login-btn">Log In</button>
       <div class="error-msg" id="gm-password-login-error"></div>
