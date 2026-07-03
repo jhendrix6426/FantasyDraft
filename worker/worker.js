@@ -1,8 +1,23 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Commish-Key, X-GM-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Commish-Key, X-GM-Token, X-Scorekeeper-Key',
 };
+
+const DEFAULT_SCORING_CONFIG = {
+  win: 3,
+  timeoutWin: 2,
+  timeoutTie: 1.5,
+  timeoutLoss: 1,
+  loss: 0,
+  rosterSize: 9,
+  countPerDay: 7,
+  gradeWeights: { nationals: 0.5, rnrsCurrent: 0.3, rnrsHistory: 0.2 },
+  formatCeilings: { T1: 1.0, T2: 1.0, BD: 0.85, SD: 0.80, Teams: 0.80, TA: 0.65 }
+};
+
+const VALID_DAYS = ['thu', 'fri', 'sat'];
+const VALID_RESULTS = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss'];
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -22,9 +37,16 @@ function requireCommish(request, env) {
   return !!key && !!env.COMMISH_KEY && key === env.COMMISH_KEY;
 }
 
+function requireScorekeeper(request, env) {
+  const key = request.headers.get('X-Scorekeeper-Key');
+  return !!key && !!env.SCOREKEEPER_KEY && key === env.SCOREKEEPER_KEY;
+}
+
 function stripTokens(gms) {
   return gms.map(({ token, ...rest }) => rest);
 }
+
+function r1(n) { return Math.round(n * 10) / 10; }
 
 // Snake-draft turn order, derived entirely from picks already made — never
 // persisted, so it can't desync from the picks array that's the source of truth.
@@ -52,6 +74,61 @@ function computeTurn(draftOrder, picks, rosterSize) {
   }
 
   return { round, pickNumber: pickIndex + 1, onTheClock, isComplete: false, onDeck };
+}
+
+function defaultLivescore() {
+  return {
+    thu: { status: 'active', entries: [] },
+    fri: { status: 'active', entries: [] },
+    sat: { status: 'active', entries: [] },
+  };
+}
+
+// Rolls up raw per-round entries into team day/season totals: each team's
+// daily score counts only its top `countPerDay` rostered players that day
+// (roster members with no entries that day count as 0, same as a bad
+// performance — this is deliberate, see CLAUDE.md for the rationale).
+async function computeLivescoreState(env, year) {
+  const [livescore, livedraft, players, config] = await Promise.all([
+    env.FANTASY_DB.get('livescore_' + year, 'json'),
+    env.FANTASY_DB.get('livedraft_' + year, 'json'),
+    env.FANTASY_DB.get('players_' + year, 'json'),
+    env.FANTASY_DB.get('scoring_config', 'json'),
+  ]);
+  const days = livescore || defaultLivescore();
+  const picks = (livedraft && livedraft.picks) || [];
+  const playerList = players || [];
+  const countPerDay = (config || DEFAULT_SCORING_CONFIG).countPerDay || DEFAULT_SCORING_CONFIG.countPerDay;
+
+  const rosterByGm = {};
+  for (const pick of picks) {
+    (rosterByGm[pick.gm] = rosterByGm[pick.gm] || []).push(pick.player);
+  }
+  const playerInfo = {};
+  for (const p of playerList) playerInfo[p.name] = p;
+
+  const teams = Object.entries(rosterByGm).map(([gm, rosterNames]) => {
+    const roster = rosterNames.map(name => ({
+      name,
+      thu: (playerInfo[name] && playerInfo[name].thu) || null,
+      fri: (playerInfo[name] && playerInfo[name].fri) || null,
+      sat: (playerInfo[name] && playerInfo[name].sat) || null,
+    }));
+    const dayTotals = {};
+    let seasonTotal = 0;
+    for (const day of VALID_DAYS) {
+      const dayEntries = (days[day] && days[day].entries) || [];
+      const totalsByPlayer = {};
+      for (const e of dayEntries) totalsByPlayer[e.player] = (totalsByPlayer[e.player] || 0) + e.pts;
+      const scores = rosterNames.map(name => totalsByPlayer[name] || 0).sort((a, b) => b - a);
+      const dayTotal = r1(scores.slice(0, countPerDay).reduce((s, v) => s + v, 0));
+      dayTotals[day] = dayTotal;
+      seasonTotal += dayTotal;
+    }
+    return { gm, roster, dayTotals, seasonTotal: r1(seasonTotal) };
+  });
+
+  return { year: Number(year), days, teams };
 }
 
 async function handleRequest(request, env) {
@@ -159,17 +236,7 @@ async function handleRequest(request, env) {
 
   if (path === '/fantasy/config' && method === 'GET') {
     const data = await env.FANTASY_DB.get('scoring_config', 'json');
-    return json(data || {
-      win: 3,
-      timeoutWin: 2,
-      timeoutTie: 1.5,
-      timeoutLoss: 1,
-      loss: 0,
-      rosterSize: 9,
-      countPerDay: 7,
-      gradeWeights: { nationals: 0.5, rnrsCurrent: 0.3, rnrsHistory: 0.2 },
-      formatCeilings: { T1: 1.0, T2: 1.0, BD: 0.85, SD: 0.80, Teams: 0.80, TA: 0.65 }
-    });
+    return json(data || DEFAULT_SCORING_CONFIG);
   }
 
   if (path === '/fantasy/config' && method === 'PUT') {
@@ -307,6 +374,77 @@ async function handleRequest(request, env) {
     state.updatedAt = Date.now();
     await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
     return json({ ok: true, pick, ...state, ...newTurn });
+  }
+
+  // ── Live scoring ────────────────────────────────────────────
+  // Rosters come from livedraft_<year>'s completed picks (grouped by gm) —
+  // this feature assumes the year's draft was run through /fantasy/livedraft,
+  // not a separately-defined roster.
+  if (path.startsWith('/fantasy/livescore/') && method === 'GET' && parts.length === 4) {
+    const year = parts[3];
+    return json(await computeLivescoreState(env, year));
+  }
+
+  if (path.endsWith('/entry') && path.startsWith('/fantasy/livescore/') && method === 'POST') {
+    if (!requireScorekeeper(request, env)) return unauthorized();
+    const year = parts[3];
+    const body = await request.json();
+    const { day, player, result } = body;
+    if (!VALID_DAYS.includes(day)) return badRequest('day must be one of: ' + VALID_DAYS.join(', '));
+    if (!VALID_RESULTS.includes(result)) return badRequest('result must be one of: ' + VALID_RESULTS.join(', '));
+    if (!player) return badRequest('player is required');
+
+    const config = await env.FANTASY_DB.get('scoring_config', 'json') || DEFAULT_SCORING_CONFIG;
+    const pts = config[result];
+    if (typeof pts !== 'number') return badRequest('No point value configured for result: ' + result);
+
+    const livescore = await env.FANTASY_DB.get('livescore_' + year, 'json') || defaultLivescore();
+    if (!livescore[day]) livescore[day] = { status: 'active', entries: [] };
+    if (livescore[day].status === 'final') return conflict('That day is already finalized — unfinalize it first to add more entries');
+
+    const entry = { id: crypto.randomUUID(), player, result, pts, ts: Date.now() };
+    livescore[day].entries.push(entry);
+    await env.FANTASY_DB.put('livescore_' + year, JSON.stringify(livescore));
+    return json({ ok: true, entry, ...(await computeLivescoreState(env, year)) });
+  }
+
+  if (path.startsWith('/fantasy/livescore/') && parts[4] === 'entry' && parts[5] && method === 'DELETE') {
+    if (!requireScorekeeper(request, env)) return unauthorized();
+    const year = parts[3];
+    const entryId = parts[5];
+    const livescore = await env.FANTASY_DB.get('livescore_' + year, 'json') || defaultLivescore();
+    let found = false;
+    for (const day of VALID_DAYS) {
+      if (!livescore[day]) continue;
+      const before = livescore[day].entries.length;
+      livescore[day].entries = livescore[day].entries.filter(e => e.id !== entryId);
+      if (livescore[day].entries.length !== before) found = true;
+    }
+    if (!found) return notFound('Entry not found: ' + entryId);
+    await env.FANTASY_DB.put('livescore_' + year, JSON.stringify(livescore));
+    return json({ ok: true, ...(await computeLivescoreState(env, year)) });
+  }
+
+  if ((path.endsWith('/finalize') || path.endsWith('/unfinalize')) && path.startsWith('/fantasy/livescore/') && method === 'POST') {
+    if (!requireScorekeeper(request, env)) return unauthorized();
+    const year = parts[3];
+    const day = parts[4];
+    const action = parts[5];
+    if (!VALID_DAYS.includes(day)) return badRequest('day must be one of: ' + VALID_DAYS.join(', '));
+
+    const livescore = await env.FANTASY_DB.get('livescore_' + year, 'json') || defaultLivescore();
+    if (!livescore[day]) livescore[day] = { status: 'active', entries: [] };
+    if (action === 'finalize') {
+      if (livescore[day].status === 'final') return conflict('Day is already finalized');
+      livescore[day].status = 'final';
+      livescore[day].finalizedAt = Date.now();
+    } else {
+      if (livescore[day].status !== 'final') return conflict('Day is not finalized');
+      livescore[day].status = 'active';
+      livescore[day].finalizedAt = null;
+    }
+    await env.FANTASY_DB.put('livescore_' + year, JSON.stringify(livescore));
+    return json({ ok: true, ...(await computeLivescoreState(env, year)) });
   }
 
   return notFound('Unknown endpoint');
