@@ -13,22 +13,37 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
 
 ## Structure
 
-- `index.html` — landing page: header banner + tab bar (Scouting, Live Draft).
-  Tab-switching JS lives inline at the bottom of the file — clicking a
-  `nav.tabs button` swaps `#tab-frame`'s `src` to `data-tab + '.html'`. Adding
-  another tab is just a new button with a matching `data-tab` and HTML file.
+- `index.html` — landing page: header banner + tab bar (Scouting, Live Draft,
+  Live Scoring, Draft History, Records). Tab-switching JS lives inline at the
+  bottom of the file — clicking a `nav.tabs button` swaps `#tab-frame`'s `src`
+  to `data-tab + '.html'`. Adding another tab is just a new button with a
+  matching `data-tab` and HTML file.
 - `scouting.html` — the scouting tool. Self-contained single file (HTML/CSS/JS,
   no dependencies, no build). This is where most of the historical-stats work
   has happened.
+- `records.js` — shared IIFE (`window.RecordsBook`) for all-time record-book
+  computation (format/day high scores, win streaks, draft steals, etc.),
+  loaded by `records.html`, `draft-history.html`, and `scouting.html` so the
+  logic isn't triplicated. Takes the raw `nationals-history` `db` payload
+  directly via `RecordsBook.compute(db)` — see its header comment for the
+  full exported API.
+- `records.html` — all-time record book UI, reads `records.js`.
+- `draft-history.html` — past fantasy drafts (standings, draft order, per-year
+  rosters), reads the same `nationals-history` API plus `records.js` for
+  badges.
 - `live-draft.html` — GM- and commissioner-facing live draft tool (see below).
 - `draft-presentation.html` — standalone OBS-facing broadcast view for the
   live draft (see below). Not part of the tab system — opened directly by URL.
+- `live-scoring.html` — scorekeeper-facing live scoring entry tool (see
+  "Live Scoring system" below).
+- `scoring-presentation.html` — standalone OBS-facing broadcast view for live
+  scoring (leaderboard + records-aware ticker). Not part of the tab system.
 - `worker/` — the `fantasy-draft` Cloudflare Worker source, deployed
-  separately from the site (see "Live Draft system").
-- `assets/header-small.png` — compact (900×220) transparent PNG logo mark
-  (badge + wordmark) used in `index.html`'s header, displayed at 34px tall
-  next to the tab bar. The header itself is a fixed 64px bar with a CSS
-  (not image-based) glow backdrop — no other image assets are in use.
+  separately from the site (see "Live Draft system" / "Live Scoring system").
+- `assets/header.png` — transparent PNG logo mark (badge + wordmark) used in
+  `index.html`'s header, displayed at 34px tall next to the tab bar. The
+  header itself is a fixed 64px bar with a CSS (not image-based) glow
+  backdrop — no other image assets are in use.
 
 ## Data source
 
@@ -159,6 +174,83 @@ hardcoded `PLAYERS` array — copy/paste it manually before a draft.
 
 **Deploying worker changes**: `cd worker && wrangler deploy` (manual, no CI —
 matches how the rest of this project deploys).
+
+## Live Scoring system
+
+A manual, round-by-round scoring tracker for Nationals weekend itself —
+separate from (but complementary to) the Live Draft system above, sharing
+the same `worker/` Worker and `FANTASY_DB` KV namespace. Built because there
+was no reliable way to pull live results automatically from either a
+spreadsheet or the tournament host's own site, so a human (a "scorekeeper,"
+not necessarily the site owner) enters results into this tool as they
+happen, regardless of where the official record lives.
+
+**Scoring model** — `scoring_config` (`GET /fantasy/config`, previously dead
+scaffolding from the earlier scrapped project attempt, now live):
+```js
+{ win: 3, timeoutWin: 2, timeoutTie: 1.5, timeoutLoss: 1, loss: 0, rosterSize: 9, countPerDay: 7, ... }
+```
+A scorekeeper picks a player and a round result (Win/Timeout Win/Timeout
+Tie/Timeout Loss/Loss — Redemption auto-awards byes as a full Win, so there's
+no separate bye option); the point value is looked up server-side, never
+trusted from the client. Spot-checked against real 2025 historical data
+(`db.matches` + known `breakdown[].pts`) and confirmed to reproduce the
+exact known totals once true draws (`winner: null`) are correctly read as a
+Timeout Tie rather than a loss.
+
+**Daily team total = sum of only the top `countPerDay` (7) of a team's 9
+rostered players that day** — the bottom 2 are dropped, recomputed fresh
+each day. A roster member with no entries that day counts as 0, same as a
+bad performance; this is deliberate so players who only attend some days
+don't inherently hurt a team, as long as 7 others are producing.
+
+**Rosters come from the Live Draft system** (`livedraft_<year>`'s completed
+`picks`, grouped by `gm`) — this feature assumes the year's draft was run
+through `/fantasy/livedraft`, not a separately-defined roster. `players_<year>`
+supplies each player's thu/fri/sat format registration, used to determine who's
+eligible to score on a given day and which format their day's points count
+toward.
+
+**Auth is a separate credential from the commissioner key** — a
+`SCOREKEEPER_KEY` Worker secret (`X-Scorekeeper-Key` header, same
+`wrangler secret put` process as `COMMISH_KEY`), deliberately independent so
+whoever's keeping score doesn't get commissioner powers over the live draft.
+There's no dedicated login-verification endpoint; a wrong key is only
+discovered on the first real write, surfacing as a 401 that forces
+`live-scoring.html` back to its login screen.
+
+**KV schema** — `livescore_<year>`:
+```js
+{
+  thu: { status: 'active'|'final', entries: [ {id, player, result, pts, ts} ], finalizedAt },
+  fri: { ... }, sat: { ... }
+}
+```
+`GET /fantasy/livescore/:year` (public) joins this with `livedraft_<year>`
+and `players_<year>` and returns the full computed rollup (`teams[].dayTotals`,
+`seasonTotal`) — this is centralized server-side in `computeLivescoreState()`
+so `live-scoring.html` and `scoring-presentation.html` don't each reimplement
+the top-7-of-9 math. `POST .../entry` (scorekeeper), `DELETE .../entry/:id`
+(scorekeeper — corrections matter more here than in the draft, since live
+scorekeeping under time pressure produces more mistakes than the slower,
+deliberate draft did), and `POST .../:day/finalize|unfinalize` (scorekeeper)
+round out the endpoints.
+
+**`scoring-presentation.html`'s ticker** cross-references live entries
+against `records.js`'s all-time `formatHighScore` thresholds (grouping a
+day's entries by each player's registered format for that day) to surface
+"closing in on / matched the all-time record" callouts, alongside a live
+individual point leader and (once a day is finalized) a recap of who led
+it. The historical `pts` values and this live formula were confirmed to come
+from the same underlying scoring model, but treat exact-value matches as
+approximate, not guaranteed identical.
+
+`live-scoring.html` reuses `live-draft.html`'s focus-preservation `render()`
+pattern (snapshot the focused element's value/selection before an
+`innerHTML` swap, restore after) plus model-syncing the player-search input
+via `oninput` — without both halves of that fix, the 3s poll loop steals
+focus and blanks the search box mid-keystroke, exactly like the bug already
+hit and fixed in the draft's commissioner GM-roster editor.
 
 ## Working on this project
 
