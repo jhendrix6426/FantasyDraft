@@ -297,16 +297,40 @@ rather than a full `renderTable()`, so toggling doesn't reset sort/scroll
 position or require a page-load-order-safe re-render like the initial
 icon appearance does (see `loadGmBoardSession()`'s trailing `renderTable()`
 call, needed because it races the main Nats-history fetch in `init()`).
-`my-board.html` is the same board panel as
-`live-draft.html`'s (full add/reorder/remove), minus the Draft button and
-turn-order UI, for GMs who want their board open separately from both the
-stats table and the draft itself — it also accepts a direct `?gm=...&token=...`
-link, not just the shared session, so it works standalone on a fresh device.
-Three ways to reach it: `index.html`'s GM Tools dropdown, a gold "My Draft
-Board" pill next to the "Scouting Portal" tag in `scouting.html`'s header
-(`.hero-link-pill` — a differently-colored sibling of the red `.hero-tag`, so
-it doesn't read as the same kind of static status label), or the "Open as
-Standalone Page" button in `live-draft.html`'s board panel.
+`my-board.html` is the same board panel as `live-draft.html`'s (full
+add/reorder/remove), minus the Draft button and turn-order UI, for GMs who
+want their board open separately from both the stats table and the draft
+itself — it also accepts a direct `?gm=...&token=...` link, not just the
+shared session, so it works standalone on a fresh device. Reachable via
+`index.html`'s GM Tools dropdown.
+
+**"Scouting Portal" and "My Draft Board" in `scouting.html`'s header are a
+view toggle, not navigation** (the gold pill used to be a link to
+`my-board.html` — it isn't anymore). `currentView` (`'scouting'` | `'board'`)
+picks which row set `renderTable()` builds, but both views share the exact
+same `COLUMN_DEFS`-driven header/row markup, so switching feels like the data
+changing under an otherwise-identical table rather than a different page:
+- Board mode filters `PLAYERS` down to `gmBoard` (in board order, not
+  re-sorted — the whole point of the board is manual ranking) instead of the
+  usual search/day/format filters, and skips the sort-column logic entirely
+  in favor of `gmBoard`'s own order. The search box still applies (handy once
+  a board gets long); the day/format/history/draft/sort filters are quietly
+  ignored rather than hidden, to avoid extra DOM-toggling complexity.
+- Two columns get bolted onto the same `activeColumns` render pass: `#`
+  (rank) and `Actions` (↑/↓/✕, plus a Draft button when this GM is on the
+  clock in an active draft — same idea as the board panel elsewhere, but
+  this page never polls, so `boardLivedraft` is fetched fresh only when
+  `switchToBoardView()` runs, not kept live).
+- There's no separate "add player" control in board view — adding still only
+  happens via the row `+`/`★` icon over in Scouting Portal, by design: the
+  toggle's whole framing is "browse & add in Scouting, review & rank in My
+  Draft Board," not two competing ways to add.
+- Toggling a player on/off the board from *within* board view (the ★ icon or
+  a modal opened from a board row) needs a full `renderTable()`, unlike the
+  lightweight `outerHTML` patch used in scouting view — removing a board
+  member here means the row disappears and every rank below it shifts, which
+  a single-button patch can't do. Both `toggleBoardIcon()` and `toggleBoard()`
+  branch on `currentView === 'board'` for this.
 
 **Resetting a draft**: `POST /fantasy/livedraft/:year/reset` (commish auth)
 hard-resets `livedraft_<year>` back to the pre-draft default (no draft order,

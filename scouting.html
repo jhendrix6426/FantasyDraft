@@ -48,6 +48,7 @@ body {
   text-transform: uppercase; letter-spacing: 3px; color: var(--red);
   background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
   padding: 4px 10px; border-radius: 100px;
+  cursor: pointer; transition: opacity .15s;
 }
 .hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
 .hero-link-pill {
@@ -55,9 +56,12 @@ body {
   font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
   text-transform: uppercase; letter-spacing: 2px; color: var(--gold);
   background: rgba(218,179,94,0.10); border: 1px solid rgba(218,179,94,0.35);
-  padding: 4px 10px; border-radius: 100px; transition: border-color .15s, color .15s, background .15s;
+  padding: 4px 10px; border-radius: 100px; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s, opacity .15s;
 }
 .hero-link-pill:hover { border-color: var(--gold-bright); color: var(--gold-bright); background: rgba(218,179,94,0.16); }
+.view-toggle.inactive { opacity: .45; }
+.view-toggle.inactive:hover { opacity: .75; }
 h1 {
   font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: 1px; font-size: 34px; line-height: 1.1; margin-bottom: 10px;
@@ -200,8 +204,18 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 }
 .board-btn:hover { border-color: var(--gold); color: var(--gold-bright); }
 .board-btn.board-remove:hover { border-color: var(--red); color: var(--red); }
+.board-btn:disabled { opacity: .35; cursor: default; }
+.board-btn:disabled:hover { border-color: var(--border); color: var(--text); }
+.board-btn.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.board-btn.primary:hover { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+.board-btn.tiny { padding: 3px 9px; font-size: 10px; }
 .board-on { color: var(--gold-bright); font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
 .board-hint { color: var(--text-mute); font-size: 11px; }
+
+.board-rank-col { color: var(--gold); font-weight: 700; text-align: center; width: 32px; }
+.board-actions-col { white-space: nowrap; }
+.board-actions-row { display: flex; align-items: center; gap: 6px; }
+.board-taken-tag { color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
 
 .board-icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -266,8 +280,8 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 <div class="page">
 <header class="hero">
   <div class="hero-tag-row">
-    <div class="hero-tag">Scouting Portal</div>
-    <a class="hero-link-pill" href="my-board.html" target="_blank">My Draft Board</a>
+    <button class="hero-tag view-toggle" id="view-scouting-btn" type="button" onclick="switchToScoutingView()">Scouting Portal</button>
+    <button class="hero-link-pill view-toggle inactive" id="view-board-btn" type="button" onclick="switchToBoardView()">My Draft Board</button>
   </div>
   <h1>2026 Fantasy Draft</h1>
   <div class="status" id="status">Loading Nationals history...</div>
@@ -358,6 +372,37 @@ let recordsBook = null;
 const FANTASY_API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
 let gmSession = null;
 let gmBoard = [];
+let gmsPublic = [];        // public {id,name} list, only needed to show "taken by X" in board view
+let currentView = 'scouting'; // 'scouting' | 'board' — same table/columns, different row set
+let boardLivedraft = null; // fetched fresh each time we switch into board view (this page never polls)
+
+async function loadGmsPublic() {
+  try { gmsPublic = await (await fetch(`${FANTASY_API_BASE}/fantasy/gms`)).json(); } catch (e) { gmsPublic = []; }
+}
+function gmName(id) {
+  const g = gmsPublic.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+function updateViewToggleUI() {
+  document.getElementById('view-scouting-btn').classList.toggle('inactive', currentView !== 'scouting');
+  document.getElementById('view-board-btn').classList.toggle('inactive', currentView !== 'board');
+}
+async function switchToScoutingView() {
+  currentView = 'scouting';
+  updateViewToggleUI();
+  renderTable();
+}
+async function switchToBoardView() {
+  currentView = 'board';
+  updateViewToggleUI();
+  if (gmSession) {
+    try {
+      boardLivedraft = await (await fetch(`${FANTASY_API_BASE}/fantasy/livedraft/${gmSession.year}`)).json();
+    } catch (e) { boardLivedraft = null; }
+  }
+  renderTable();
+}
 
 async function loadGmBoardSession() {
   let saved;
@@ -405,6 +450,9 @@ function toggleBoard(name) {
   if (idx === -1) gmBoard.push(name); else gmBoard.splice(idx, 1);
   saveGmBoard();
   renderBoardControl(name);
+  // In board view this needs the full re-render treatment too — see the
+  // matching comment in toggleBoardIcon().
+  if (currentView === 'board') { renderTable(); return; }
   // Keep this player's row icon (if currently rendered) in sync too — the
   // reverse of toggleBoardIcon() updating the modal.
   const rowIcon = document.querySelector(`.board-icon-btn[data-name="${CSS.escape(name)}"]`);
@@ -426,9 +474,60 @@ function toggleBoardIcon(btn) {
   const idx = gmBoard.indexOf(name);
   if (idx === -1) gmBoard.push(name); else gmBoard.splice(idx, 1);
   saveGmBoard();
+  // In board view, toggling a row's own icon means the row itself should
+  // disappear/reappear and every rank below it shift — needs a full
+  // re-render, not just patching the one button (which is all scouting
+  // view needs, since there the row stays put either way).
+  if (currentView === 'board') { renderTable(); return; }
   btn.outerHTML = renderBoardIcon(name);
   const modalOpen = document.getElementById('player-modal').classList.contains('open');
   if (modalOpen && document.getElementById('m-name').textContent === name) renderBoardControl(name);
+}
+
+// ── Board table view (My Draft Board) ──────────────────────────────────────
+// Rank + Actions columns bolted onto the same COLUMN_DEFS-driven row markup
+// renderTable() already builds for the scouting table — see renderTable()'s
+// boardMode branch. This page never polls, so boardLivedraft is only as
+// fresh as the last switchToBoardView() call or the last pick made here.
+function renderBoardActionsCell(p, idx, total) {
+  const ld = boardLivedraft;
+  const pick = ld ? ld.picks.find(pk => pk.player === p.name) : null;
+  const canDraft = !!ld && !ld.isComplete && ld.status === 'active' && ld.onTheClock === gmSession.gmId;
+  return `<td class="board-actions-col"><div class="board-actions-row">
+    ${pick ? `<span class="board-taken-tag">taken by ${gmName(pick.gm)}</span>`
+      : (canDraft ? `<button class="board-btn tiny primary" data-name="${p.name.replace(/"/g, '&quot;')}" onclick="event.stopPropagation();draftFromBoardTable(this)">Draft</button>` : '')}
+    <button class="board-btn tiny" ${idx === 0 ? 'disabled' : ''} onclick="event.stopPropagation();moveBoardRank(${idx},-1)">&uarr;</button>
+    <button class="board-btn tiny" ${idx === total - 1 ? 'disabled' : ''} onclick="event.stopPropagation();moveBoardRank(${idx},1)">&darr;</button>
+    <button class="board-btn tiny" onclick="event.stopPropagation();removeBoardRank(${idx})">&times;</button>
+  </div></td>`;
+}
+function moveBoardRank(idx, dir) {
+  const j = idx + dir;
+  if (j < 0 || j >= gmBoard.length) return;
+  [gmBoard[idx], gmBoard[j]] = [gmBoard[j], gmBoard[idx]];
+  saveGmBoard();
+  renderTable();
+}
+function removeBoardRank(idx) {
+  gmBoard.splice(idx, 1);
+  saveGmBoard();
+  renderTable();
+}
+async function draftFromBoardTable(btn) {
+  const name = btn.dataset.name;
+  if (!confirm(`Draft ${name}?`)) return;
+  try {
+    const pickRequestId = crypto.randomUUID();
+    const res = await fetch(`${FANTASY_API_BASE}/fantasy/livedraft/${gmSession.year}/pick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-GM-Token': gmSession.gmToken },
+      body: JSON.stringify({ gmId: gmSession.gmId, player: name, pickRequestId }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Could not draft.'); return; }
+    boardLivedraft = data; // the pick response already includes the fresh livedraft state
+    renderTable();
+  } catch (e) { alert('Could not draft: ' + e.message); }
 }
 
 const FMT_MAP = {
@@ -588,6 +687,7 @@ function buildFantasyStats() {
 
 async function init() {
   loadGmBoardSession(); // fire-and-forget; board control just won't show until this resolves
+  loadGmsPublic(); // fire-and-forget; only needed for "taken by X" in board view
 
   try {
     const res = await fetch(NATS_URL, {signal: AbortSignal.timeout(15000)});
@@ -867,38 +967,50 @@ function computeScores(rows) {
 let sortKey = 'total', sortDir = -1;
 
 function renderTable() {
-  const search = document.getElementById('search').value.toLowerCase();
-  const fDays = document.getElementById('filter-days').value;
-  const fThu = document.getElementById('filter-thu').value;
-  const fFri = document.getElementById('filter-fri').value;
-  const fSat = document.getElementById('filter-sat').value;
-  const fFmt = document.getElementById('filter-fmt').value;
-  const fHist = document.getElementById('filter-hist').value;
-  sortKey = document.getElementById('sort-col').value;
+  const boardMode = currentView === 'board';
   const activeYears = getActiveYears();
+  let players;
 
-  let players = PLAYERS.filter(p => {
-    if (search && !p.name.toLowerCase().includes(search)) return false;
-    if (fDays !== 'ALL' && p.days !== parseInt(fDays)) return false;
-    if (fThu !== 'ANY') { if (fThu==='NONE'?p.thu!==null:p.thu!==fThu) return false; }
-    if (fFri !== 'ANY') { if (fFri==='NONE'?p.fri!==null:p.fri!==fFri) return false; }
-    if (fSat !== 'ANY') { if (fSat==='NONE'?p.sat!==null:p.sat!==fSat) return false; }
-    if (fFmt !== 'ALL' && p.thu!==fFmt && p.fri!==fFmt && p.sat!==fFmt) return false;
-    if (fHist !== 'ALL') {
-      const has = ['thu','fri','sat'].some(d => p[d] && getPlayerEntries(p.name, p[d], activeYears));
-      if (fHist==='HAS' && !has) return false;
-      if (fHist==='NONE' && has) return false;
+  if (boardMode) {
+    if (!gmSession) {
+      document.getElementById('table-wrap').innerHTML = '<div class="board-hint" style="padding:16px">Log in as a GM in <a href="live-draft.html" target="_blank">Live Draft</a> to build your board.</div>';
+      return;
     }
-    const fDraft = document.getElementById('filter-draft').value;
-    if (fDraft !== 'ALL') {
-      const fs = fantasyStats[p.name];
-      if (fDraft==='HAS' && !fs) return false;
-      if (fDraft==='NONE' && fs) return false;
-      if (fDraft==='OVER' && (!fs || fs.avgDelta <= 0)) return false;
-      if (fDraft==='UNDER' && (!fs || fs.avgDelta >= 0)) return false;
-    }
-    return true;
-  });
+    const search = document.getElementById('search').value.toLowerCase();
+    players = PLAYERS.filter(p => gmBoard.includes(p.name) && (!search || p.name.toLowerCase().includes(search)));
+  } else {
+    const search = document.getElementById('search').value.toLowerCase();
+    const fDays = document.getElementById('filter-days').value;
+    const fThu = document.getElementById('filter-thu').value;
+    const fFri = document.getElementById('filter-fri').value;
+    const fSat = document.getElementById('filter-sat').value;
+    const fFmt = document.getElementById('filter-fmt').value;
+    const fHist = document.getElementById('filter-hist').value;
+    sortKey = document.getElementById('sort-col').value;
+
+    players = PLAYERS.filter(p => {
+      if (search && !p.name.toLowerCase().includes(search)) return false;
+      if (fDays !== 'ALL' && p.days !== parseInt(fDays)) return false;
+      if (fThu !== 'ANY') { if (fThu==='NONE'?p.thu!==null:p.thu!==fThu) return false; }
+      if (fFri !== 'ANY') { if (fFri==='NONE'?p.fri!==null:p.fri!==fFri) return false; }
+      if (fSat !== 'ANY') { if (fSat==='NONE'?p.sat!==null:p.sat!==fSat) return false; }
+      if (fFmt !== 'ALL' && p.thu!==fFmt && p.fri!==fFmt && p.sat!==fFmt) return false;
+      if (fHist !== 'ALL') {
+        const has = ['thu','fri','sat'].some(d => p[d] && getPlayerEntries(p.name, p[d], activeYears));
+        if (fHist==='HAS' && !has) return false;
+        if (fHist==='NONE' && has) return false;
+      }
+      const fDraft = document.getElementById('filter-draft').value;
+      if (fDraft !== 'ALL') {
+        const fs = fantasyStats[p.name];
+        if (fDraft==='HAS' && !fs) return false;
+        if (fDraft==='NONE' && fs) return false;
+        if (fDraft==='OVER' && (!fs || fs.avgDelta <= 0)) return false;
+        if (fDraft==='UNDER' && (!fs || fs.avgDelta >= 0)) return false;
+      }
+      return true;
+    });
+  }
 
   // Compute per-player stats
   const rows = players.map(p => {
@@ -924,30 +1036,37 @@ function renderTable() {
 
   computeScores(rows);
 
-  // Sort
-  rows.sort((a,b) => {
-    if (sortKey==='name') return a.name.localeCompare(b.name)*sortDir;
-    const getVal = r => {
-      if (sortKey==='days') return r.days;
-      if (sortKey==='total') return r.totalAvg ?? -1;
-      if (sortKey==='totalPts') return r.totalPts ?? -1;
-      if (sortKey==='avgPtsYr') return r.avgPtsYr ?? -1;
-      if (sortKey==='thuTotal'||sortKey==='friTotal'||sortKey==='satTotal') {
-        const s = r.stats.find(s=>s.day===sortKey.slice(0,3));
-        return s?.total ?? -1;
-      }
-      if (sortKey==='winpct') return r.winStats?.pct ?? -1;
-      if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
-      if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
-      if (sortKey==='score') return r.score ?? -999;
-      const s = r.stats.find(s=>s.day===sortKey);
-      return s?.personalAvg ?? -1;
-    };
-    return (getVal(a)-getVal(b))*sortDir;
-  });
+  // Sort — board view keeps the GM's own manual rank order instead of a
+  // sortable column, since reordering the board *is* the ranking.
+  if (boardMode) {
+    rows.sort((a, b) => gmBoard.indexOf(a.name) - gmBoard.indexOf(b.name));
+  } else {
+    rows.sort((a,b) => {
+      if (sortKey==='name') return a.name.localeCompare(b.name)*sortDir;
+      const getVal = r => {
+        if (sortKey==='days') return r.days;
+        if (sortKey==='total') return r.totalAvg ?? -1;
+        if (sortKey==='totalPts') return r.totalPts ?? -1;
+        if (sortKey==='avgPtsYr') return r.avgPtsYr ?? -1;
+        if (sortKey==='thuTotal'||sortKey==='friTotal'||sortKey==='satTotal') {
+          const s = r.stats.find(s=>s.day===sortKey.slice(0,3));
+          return s?.total ?? -1;
+        }
+        if (sortKey==='winpct') return r.winStats?.pct ?? -1;
+        if (sortKey==='avgPick') return fantasyStats[r.name] ? -(fantasyStats[r.name].avgPick) : -999; // lower pick = higher value, invert
+        if (sortKey==='avgDelta') return fantasyStats[r.name]?.avgDelta ?? -999;
+        if (sortKey==='score') return r.score ?? -999;
+        const s = r.stats.find(s=>s.day===sortKey);
+        return s?.personalAvg ?? -1;
+      };
+      return (getVal(a)-getVal(b))*sortDir;
+    });
+  }
 
   if (!rows.length) {
-    document.getElementById('table-wrap').innerHTML = '<div style="color:#555;padding:16px">No players match filters.</div>';
+    document.getElementById('table-wrap').innerHTML = boardMode
+      ? '<div class="board-hint" style="padding:16px">Your board is empty — switch to Scouting Portal and click the + beside a player\'s name to add them.</div>'
+      : '<div style="color:#555;padding:16px">No players match filters.</div>';
     return;
   }
 
@@ -955,15 +1074,29 @@ function renderTable() {
 
   let html = `<table>
     <thead><tr>
-      ${activeColumns.map(c => c.sortKey ? `<th onclick="toggleSort('${c.sortKey}')">${c.label}</th>` : `<th>${c.label}</th>`).join('')}
+      ${boardMode ? '<th>#</th>' : ''}
+      ${activeColumns.map(c => (c.sortKey && !boardMode) ? `<th onclick="toggleSort('${c.sortKey}')">${c.label}</th>` : `<th>${c.label}</th>`).join('')}
+      ${boardMode ? '<th>Actions</th>' : ''}
     </tr></thead><tbody>`;
 
-  for (const p of rows) {
-    html += `<tr>${activeColumns.map(c => c.render(p)).join('')}</tr>`;
+  if (boardMode) {
+    rows.forEach((p, idx) => {
+      html += `<tr>
+        <td class="board-rank-col">${idx + 1}</td>
+        ${activeColumns.map(c => c.render(p)).join('')}
+        ${renderBoardActionsCell(p, idx, rows.length)}
+      </tr>`;
+    });
+  } else {
+    for (const p of rows) {
+      html += `<tr>${activeColumns.map(c => c.render(p)).join('')}</tr>`;
+    }
   }
 
   html += `</tbody></table>
-    <div class="footer-note">${rows.length} players shown. Format: Personal avg Nx / Pool avg (±diff). Pool avg = all players across both formats that day. Draft Score = weighted blend of the stats configured above, normalized 0-100 across the players currently shown. Click player name for full profile.</div>`;
+    <div class="footer-note">${rows.length} players shown. ${boardMode
+      ? 'Ranked in your own draft-board order — reorder with ↑/↓, remove with ✕.'
+      : 'Format: Personal avg Nx / Pool avg (±diff). Pool avg = all players across both formats that day. Draft Score = weighted blend of the stats configured above, normalized 0-100 across the players currently shown. Click player name for full profile.'}</div>`;
 
   document.getElementById('table-wrap').innerHTML = html;
 }
