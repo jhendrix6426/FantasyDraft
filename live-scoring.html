@@ -83,17 +83,18 @@ select, input[type=text], input[type=password], textarea {
 select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,52,80,0.15); }
 .field { margin-bottom: 14px; }
 
-button.btn {
+.btn {
+  display: inline-block; text-decoration: none; text-align: center;
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
   font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px;
   text-transform: uppercase; letter-spacing: 1px; padding: 10px 18px;
   border-radius: 100px; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
 }
-button.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
-button.btn:disabled { opacity: .4; cursor: default; }
-button.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
-button.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
-button.btn-sm { padding: 6px 12px; font-size: 10px; }
+.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 10px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
 .error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
@@ -376,6 +377,11 @@ function renderLogin() {
       <div class="field"><label>Passphrase</label><input type="password" id="sk-key"></div>
       <button class="btn btn-primary" id="login-btn">Log In</button>
       <div class="error-msg" id="login-error"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Just Watching?</div>
+      <div class="hint" style="margin-bottom:12px">No login needed to follow along — this opens the same clean broadcast display, without any scoring controls.</div>
+      <a class="btn" href="scoring-presentation.html?year=${state.year}" target="_blank">Open Live Display</a>
     </div>
   `;
 }

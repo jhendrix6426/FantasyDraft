@@ -214,6 +214,13 @@ spreadsheet or the tournament host's own site, so a human (a "scorekeeper,"
 not necessarily the site owner) enters results into this tool as they
 happen, regardless of where the official record lives.
 
+`live-scoring.html`'s login screen has a "Just Watching?" option below the
+scorekeeper passphrase field that needs no login and just opens
+`scoring-presentation.html?year=...` in a new tab — for anyone (including the
+scorekeeper's own second monitor, or a TV for the room) who wants the clean
+read-only broadcast display without the entry UI. Mirrors the equivalent
+"Just Watching" link on `live-draft.html`'s landing screen.
+
 **Scoring model** — `scoring_config` (`GET /fantasy/config`, previously dead
 scaffolding from the earlier scrapped project attempt, now live):
 ```js
