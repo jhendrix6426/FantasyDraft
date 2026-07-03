@@ -180,6 +180,20 @@ tbody tr:hover { border-left: 2px solid var(--red); }
   transition: color .15s, border-color .15s;
 }
 .modal-close:hover { color: var(--red); border-color: var(--red); }
+.board-control-row {
+  padding: 12px 22px; border-bottom: 1px solid var(--border-soft); background: var(--panel-2);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.board-btn {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 100px;
+  padding: 6px 14px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+.board-btn:hover { border-color: var(--gold); color: var(--gold-bright); }
+.board-btn.board-remove:hover { border-color: var(--red); color: var(--red); }
+.board-on { color: var(--gold-bright); font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.board-hint { color: var(--text-mute); font-size: 11px; }
+.board-hint a { color: var(--cyan); }
 .modal-body { padding: 18px 22px; }
 .modal-section { margin-bottom: 22px; }
 .modal-sec-title {
@@ -287,6 +301,7 @@ tbody tr:hover { border-left: 2px solid var(--red); }
       </div>
       <button class="modal-close" onclick="closeModal()">Close ✕</button>
     </div>
+    <div class="board-control-row" id="m-board-control"></div>
     <div class="modal-body">
       <div class="modal-section">
         <div class="modal-sec-title">Records Held</div>
@@ -312,6 +327,59 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 <script>
 const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
 let recordsBook = null;
+
+// ── GM draft board (shared with live-draft.html / my-board.html) ──────────
+// Reads the same 'livedraft-gm' localStorage session live-draft.html sets on
+// login — same-origin, so it's already there if a GM logged in anywhere on
+// this site. No login flow lives here; this only adds/removes players on an
+// already-authenticated GM's board straight from the player modal.
+const FANTASY_API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+let gmSession = null;
+let gmBoard = [];
+
+async function loadGmBoardSession() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem('livedraft-gm') || 'null'); } catch (e) { return; }
+  if (!saved) return;
+  gmSession = saved;
+  try {
+    const res = await fetch(`${FANTASY_API_BASE}/fantasy/livedraft/${saved.year}/board?gmId=${encodeURIComponent(saved.gmId)}`, {
+      headers: { 'X-GM-Token': saved.gmToken },
+    });
+    const data = await res.json();
+    if (res.ok) gmBoard = data.board || [];
+  } catch (e) { /* board control just won't show yet if this fails */ }
+}
+
+async function saveGmBoard() {
+  if (!gmSession) return;
+  try {
+    await fetch(`${FANTASY_API_BASE}/fantasy/livedraft/${gmSession.year}/board`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-GM-Token': gmSession.gmToken },
+      body: JSON.stringify({ gmId: gmSession.gmId, board: gmBoard }),
+    });
+  } catch (e) { /* board still reflects locally; next edit will retry the save */ }
+}
+
+function renderBoardControl(name) {
+  const el = document.getElementById('m-board-control');
+  if (!gmSession) {
+    el.innerHTML = `<span class="board-hint">Log in as a GM in <a href="live-draft.html" target="_blank">Live Draft</a> to add players to your board.</span>`;
+    return;
+  }
+  const idx = gmBoard.indexOf(name);
+  el.innerHTML = idx === -1
+    ? `<button class="board-btn" id="board-toggle-btn">+ Add to My Draft Board</button>`
+    : `<span class="board-on">★ On your board (#${idx + 1})</span><button class="board-btn board-remove" id="board-toggle-btn">Remove</button>`;
+  document.getElementById('board-toggle-btn').onclick = () => toggleBoard(name);
+}
+function toggleBoard(name) {
+  const idx = gmBoard.indexOf(name);
+  if (idx === -1) gmBoard.push(name); else gmBoard.splice(idx, 1);
+  saveGmBoard();
+  renderBoardControl(name);
+}
 
 const FMT_MAP = {
   'T1 2-Player':'T1','T2 2-Player':'T2','Booster Draft':'BD',
@@ -469,6 +537,8 @@ function buildFantasyStats() {
 }
 
 async function init() {
+  loadGmBoardSession(); // fire-and-forget; board control just won't show until this resolves
+
   try {
     const res = await fetch(NATS_URL, {signal: AbortSignal.timeout(15000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
@@ -862,6 +932,7 @@ function openModal(name) {
   document.getElementById('m-name').textContent = name;
   document.getElementById('m-meta').textContent =
     `${[p.thu,p.fri,p.sat].filter(Boolean).map(f=>FMT_LABEL[f]||f).join(' · ')} · ${p.days} day${p.days!==1?'s':''}${p.firstNats?' · First Nationals':''}`;
+  renderBoardControl(name);
 
   // RECORDS HELD
   const heldRecords = recordsBook ? RecordsBook.recordsForPlayer(recordsBook, name) : [];

@@ -103,6 +103,16 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 .error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
 .hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
+.site-nav {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; margin-bottom: 6px; font-family: 'Oswald', sans-serif;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+}
+.site-nav a { color: var(--text-dim); text-decoration: none; transition: color .15s; }
+.site-nav a:hover { color: var(--gold-bright); }
+.site-nav a.home { color: var(--gold); font-weight: 600; }
+.site-nav .sep { color: var(--text-mute); }
+
 .landing-choice { display: flex; gap: 14px; flex-wrap: wrap; }
 .landing-choice button, .landing-choice a.btn { flex: 1; min-width: 200px; padding: 24px; }
 
@@ -167,6 +177,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 </head>
 <body>
 <div class="page">
+  <div id="site-nav"></div>
   <header class="hero">
     <div class="hero-tag">Live Draft</div>
     <h1 id="page-title">Fantasy Draft — Live</h1>
@@ -176,6 +187,24 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
   <div id="app"></div>
 </div>
 
+<script>
+// GMs reach this page via a direct shareable link (?gm=...&token=...), not
+// through index.html's tab bar/iframe — so unlike a normal tab visit, there's
+// no site header/nav around them at all. Show a lightweight one, but only
+// when this page isn't embedded in that iframe (where index.html's own
+// header already provides it, and a second one would be redundant).
+if (window.self === window.top) {
+  document.getElementById('site-nav').innerHTML = `
+    <nav class="site-nav">
+      <a class="home" href="index.html">&larr; FantasyDraft</a>
+      <span class="sep">/</span>
+      <a href="scouting.html">Scouting</a>
+      <a href="live-scoring.html">Live Scoring</a>
+      <a href="draft-history.html">Draft History</a>
+      <a href="records.html">Records</a>
+    </nav>`;
+}
+</script>
 <script>
 const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
 
@@ -189,6 +218,7 @@ const state = {
   gmsPublic: [],        // [{id,name,active}]
   playerPool: [],       // full year pool, fetched independent of draft status so a GM can board-build pre-draft
   board: [],            // this GM's own ranked wishlist (private, [names in rank order])
+  search: '',            // player search text, model-synced (see note on render())
   pollTimer: null,
   submitting: false,
   error: null,
@@ -227,20 +257,36 @@ function clearSession() {
 }
 
 // ── Polling ───────────────────────────────────────────────────
-async function fetchLivedraft() {
+// A background poll rebuilding the whole page mid-interaction is dangerous,
+// not just annoying: it can destroy a <select> while its native dropdown is
+// open (the "cursor disappearing" bug), and it silently ate the GM roster
+// editor's typed input the same way before render()'s focus-preservation
+// existed. isBackgroundPoll skips the render (data is still fetched and
+// stored — just not painted) whenever focus is inside any form control, so
+// an in-progress selection/typing is never pulled out from under the user.
+// The next poll (or their own action) renders normally once they're done.
+function isInteractingWithForm() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const app = document.getElementById('app');
+  return ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) && app.contains(el);
+}
+
+async function fetchLivedraft(isBackgroundPoll) {
   try {
     state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`);
     state.error = null;
   } catch (e) {
     state.error = 'Could not reach the draft server: ' + e.message;
   }
+  if (isBackgroundPoll && isInteractingWithForm()) return;
   render();
 }
 
 function startPolling() {
   stopPolling();
   fetchLivedraft();
-  state.pollTimer = setInterval(fetchLivedraft, 3000);
+  state.pollTimer = setInterval(() => fetchLivedraft(true), 3000);
 }
 
 // Board-building needs the full year pool independent of draft status (the
@@ -347,6 +393,7 @@ async function loginAsCommish() {
 // ── GM actions ────────────────────────────────────────────────
 async function submitPick(playerName) {
   if (state.submitting) return;
+  if (!confirm(`Draft ${playerName}?`)) return;
   state.submitting = true; render();
   const pickRequestId = crypto.randomUUID();
   try {
@@ -597,8 +644,8 @@ function renderGmView() {
   const playersHtml = (!ld.isComplete && isMine) ? `
     <div class="card">
       <div class="card-title">Available Players (${available.length})</div>
-      <div class="field"><input type="text" id="player-search" placeholder="Search players..."></div>
-      <div class="player-list" id="player-list">${renderPlayerRows(available)}</div>
+      <div class="field"><input type="text" id="player-search" placeholder="Search players..." value="${state.search.replace(/"/g, '&quot;')}"></div>
+      <div class="player-list" id="player-list">${renderPlayerRows(available, state.search)}</div>
     </div>` : '';
 
   return `
@@ -655,6 +702,7 @@ function renderBoardPanel(picked, pickerOf, canDraftFromBoard) {
           ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
         </select>
       </div>
+      <div class="hint"><a href="my-board.html?year=${state.year}" target="_blank" style="color:var(--cyan)">Open as a standalone page</a> — same board, useful for keeping it up on its own tab or device while you scout.</div>
     </div>`;
 }
 
@@ -682,13 +730,7 @@ function renderLogout() {
 
 function attachGmHandlers() {
   const search = document.getElementById('player-search');
-  if (search) search.oninput = () => {
-    const ld = state.livedraft;
-    const picked = new Set(ld.picks.map(p => p.player));
-    const available = (ld.playerPool || []).filter(p => !picked.has(p.name));
-    document.getElementById('player-list').innerHTML = renderPlayerRows(available, search.value);
-    attachDraftButtons();
-  };
+  if (search) search.oninput = () => { state.search = search.value; render(); };
   attachDraftButtons();
   const logout = document.getElementById('logout-link');
   if (logout) logout.onclick = clearSession;

@@ -17,7 +17,16 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
   Live Scoring, Draft History, Records). Tab-switching JS lives inline at the
   bottom of the file — clicking a `nav.tabs button` swaps `#tab-frame`'s `src`
   to `data-tab + '.html'`. Adding another tab is just a new button with a
-  matching `data-tab` and HTML file.
+  matching `data-tab` and HTML file. This header only wraps a page when it's
+  reached *through* the tab bar (i.e. loaded inside `#tab-frame`) — GMs reach
+  `live-draft.html`/`my-board.html` via a direct shareable link instead, which
+  bypasses `index.html` entirely. Those pages (plus `live-scoring.html`, which
+  can also be opened directly) detect this with `window.self === window.top`
+  and render their own small `.site-nav` back-link row when true, so a GM
+  arriving cold via their link isn't stranded with no way to reach the rest
+  of the site. Don't add this to `draft-presentation.html`/
+  `scoring-presentation.html` — those are deliberately chrome-free full-bleed
+  broadcast views, always opened directly, never wrapped by `index.html`.
 - `scouting.html` — the scouting tool. Self-contained single file (HTML/CSS/JS,
   no dependencies, no build). This is where most of the historical-stats work
   has happened.
@@ -32,6 +41,11 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
   rosters), reads the same `nationals-history` API plus `records.js` for
   badges.
 - `live-draft.html` — GM- and commissioner-facing live draft tool (see below).
+- `my-board.html` — standalone GM-only view of a single GM's private draft
+  board (see "GM draft boards" below), for keeping it open on its own
+  tab/device separate from both `live-draft.html` and `scouting.html`. Not
+  part of the tab system — opened directly by URL or via a link from
+  `live-draft.html`'s board panel.
 - `draft-presentation.html` — standalone OBS-facing broadcast view for the
   live draft (see below). Not part of the tab system — opened directly by URL.
 - `live-scoring.html` — scorekeeper-facing live scoring entry tool (see
@@ -191,6 +205,20 @@ one GM's strategy stays invisible to the others. When it's that GM's turn,
 board rows for still-available players get an inline Draft button, so the
 board doubles as a fast-pick tool, not just a reference list.
 
+A GM's session (`{gmId, gmToken, gmName, year}`) lives in `localStorage` under
+the key `livedraft-gm`, set on login in `live-draft.html` or `my-board.html`.
+Because `scouting.html`, `live-draft.html`, and `my-board.html` are all
+same-origin, this session is shared across all three without any extra
+plumbing — logging in on one logs you in on the others. `scouting.html`'s
+per-player modal reads this session (read-only glance, no login flow lives
+there) and shows an "Add to My Draft Board" / "Remove" toggle scoped to
+whichever GM is logged in, so a GM can build their board while looking at the
+real stats, not just names. `my-board.html` is the same board panel as
+`live-draft.html`'s (full add/reorder/remove), minus the Draft button and
+turn-order UI, for GMs who want their board open separately from both the
+stats table and the draft itself — it also accepts a direct `?gm=...&token=...`
+link, not just the shared session, so it works standalone on a fresh device.
+
 **Resetting a draft**: `POST /fantasy/livedraft/:year/reset` (commish auth)
 hard-resets `livedraft_<year>` back to the pre-draft default (no draft order,
 roster size, player pool, or picks) — wired to a "Reset Draft to Pre-Draft"
@@ -287,6 +315,36 @@ pattern (snapshot the focused element's value/selection before an
 via `oninput` — without both halves of that fix, the 3s poll loop steals
 focus and blanks the search box mid-keystroke, exactly like the bug already
 hit and fixed in the draft's commissioner GM-roster editor.
+
+**Two related bugs found during pre-event testing, both from the same root
+cause** (background polling rebuilding the page mid-interaction) **— fixed in
+`live-draft.html` and `my-board.html`:**
+- The GM player-search box wasn't actually model-synced (unlike
+  `live-scoring.html`'s, which was correct from the start) — `renderGmView()`
+  called `renderPlayerRows(available)` with no filter, so every 3s poll
+  quietly replaced the filtered list with the full unfiltered pool while the
+  search box still showed the typed text, unnoticed until a GM drafted
+  whatever the top row now was. Fixed by adding `state.search`, using it in
+  both the template's `value=` and the `renderPlayerRows` call, so the
+  correct filtered list renders no matter what triggered that render.
+- A background poll can also destroy a `<select>` while its native dropdown
+  is open (e.g. the commissioner's draft-order picker), which reads as the
+  selection/cursor randomly glitching. Fixed generically: `fetchLivedraft()`
+  (and `my-board.html`'s poll) takes an `isBackgroundPoll` flag and skips the
+  render — not the fetch, so data still stays fresh — whenever
+  `document.activeElement` is an `INPUT`/`SELECT`/`TEXTAREA` inside `#app`.
+  Direct, user-triggered renders (clicking a button, selecting a GM,
+  submitting a pick) are unaffected and still render immediately; only the
+  timer-driven background tick defers. If you add another poll loop or
+  another dropdown/text field to either file, this guard already covers it —
+  no per-widget patching needed.
+
+**Drafting a player requires confirming a native `confirm()` dialog** ("Draft
+{name}?") in `submitPick()` — covers both the main available-players list and
+drafting straight from a GM's board, added after a mock draft produced a
+misclick under the search bug above. Keep this even now that the search bug
+is fixed — it's cheap insurance against fat-fingering the wrong row during a
+live event.
 
 ## Working on this project
 

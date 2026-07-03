@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Draft Board — Fantasy Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --border-soft: #1c1c22;
+  --red: #ff3450;
+  --red-dim: #7a1424;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+  --cyan: #3ec7ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scrollbar-color: var(--border) var(--bg); }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 900px 500px at 12% -10%, rgba(255,52,80,0.14), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(218,179,94,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+.page { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: 28px 4px 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 3px; color: var(--red);
+  background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
+  padding: 4px 10px; border-radius: 100px; margin-bottom: 10px;
+}
+.hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+h1 {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; font-size: 26px; line-height: 1.1; margin-bottom: 8px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.status {
+  display: inline-block; color: var(--text-dim); font-size: 11px;
+  padding: 5px 12px; background: var(--panel); border: 1px solid var(--border-soft);
+  border-radius: 100px;
+}
+
+.card {
+  background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--gold) 50%, var(--red));
+}
+.card-title {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 14px;
+}
+
+label { display: block; color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Oswald', sans-serif; font-weight: 500; margin-bottom: 5px; }
+select, input[type=text], input[type=password] {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 11px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  width: 100%; border-radius: 6px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+select:focus, input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,52,80,0.15); }
+.field { margin-bottom: 14px; }
+
+.btn {
+  display: inline-block; text-decoration: none; text-align: center;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1px; padding: 10px 18px;
+  border-radius: 100px; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 10px; }
+
+.error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
+.hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+
+.site-nav {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; margin-bottom: 6px; font-family: 'Oswald', sans-serif;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+}
+.site-nav a { color: var(--text-dim); text-decoration: none; transition: color .15s; }
+.site-nav a:hover { color: var(--gold-bright); }
+.site-nav a.home { color: var(--gold); font-weight: 600; }
+.site-nav .sep { color: var(--text-mute); }
+
+.board-list { max-height: 520px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; margin-bottom: 4px; }
+.board-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border-soft);
+}
+.board-row:last-child { border-bottom: none; }
+.board-row.taken { opacity: 0.45; }
+.board-row.taken .board-name { text-decoration: line-through; }
+.board-rank { color: var(--gold); font-weight: 700; width: 22px; flex-shrink: 0; }
+.board-name-wrap { flex: 1; min-width: 0; }
+.board-name { font-weight: 600; }
+.board-status { color: var(--text-mute); font-size: 10px; }
+
+.links-row { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
+.links-row a { color: var(--cyan); font-size: 11px; text-decoration: underline; }
+.logout-link { color: var(--text-mute); font-size: 11px; cursor: pointer; text-decoration: underline; }
+.logout-link:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div id="site-nav"></div>
+  <header class="hero">
+    <div class="hero-tag">My Draft Board</div>
+    <h1 id="page-title">Draft Board</h1>
+    <div class="status" id="status">Loading...</div>
+  </header>
+
+  <div id="app"></div>
+</div>
+
+<script>
+// This page is always opened directly (never through index.html's tab
+// bar/iframe — see CLAUDE.md), so it never has the site header/nav unless
+// we add it ourselves.
+if (window.self === window.top) {
+  document.getElementById('site-nav').innerHTML = `
+    <nav class="site-nav">
+      <a class="home" href="index.html">&larr; FantasyDraft</a>
+      <span class="sep">/</span>
+      <a href="scouting.html">Scouting</a>
+      <a href="live-draft.html">Live Draft</a>
+      <a href="live-scoring.html">Live Scoring</a>
+    </nav>`;
+}
+</script>
+
+<script>
+const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+
+const params = new URLSearchParams(location.search);
+const state = {
+  year: parseInt(params.get('year')) || 2026,
+  gmId: null, gmToken: null, gmName: null,
+  gmsPublic: [],
+  playerPool: [],
+  board: [],
+  livedraft: null,   // fetched read-only, only to show "already taken" status
+  pollTimer: null,
+  error: null,
+};
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+const publicGet = (path) => apiFetch(path, { method: 'GET' });
+const gmFetch = (path, method, body) => apiFetch(path, {
+  method, headers: { 'Content-Type': 'application/json', 'X-GM-Token': state.gmToken },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+});
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// Shared with live-draft.html on purpose — logging in here also logs you in
+// there, and vice versa, since it's the same GM identity either way.
+function saveGmSession() {
+  localStorage.setItem('livedraft-gm', JSON.stringify({ gmId: state.gmId, gmToken: state.gmToken, gmName: state.gmName, year: state.year }));
+}
+function clearSession() {
+  localStorage.removeItem('livedraft-gm');
+  location.reload();
+}
+
+async function loadBoardData() {
+  try { state.playerPool = await publicGet(`/fantasy/players/${state.year}`); } catch (e) { state.playerPool = []; }
+  try {
+    const r = await gmFetch(`/fantasy/livedraft/${state.year}/board?gmId=${encodeURIComponent(state.gmId)}`, 'GET');
+    state.board = r.board || [];
+  } catch (e) { state.board = []; }
+  try { state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`); } catch (e) { state.livedraft = null; }
+  render();
+}
+
+// Skip the render (not the fetch) while focus is inside a form control, so a
+// background poll can't destroy an open <select> or an in-progress edit —
+// see the matching note in live-draft.html's fetchLivedraft().
+function isInteractingWithForm() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const app = document.getElementById('app');
+  return ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) && app.contains(el);
+}
+
+function startPolling() {
+  stopPolling();
+  state.pollTimer = setInterval(async () => {
+    try {
+      state.livedraft = await publicGet(`/fantasy/livedraft/${state.year}`);
+      if (!isInteractingWithForm()) render();
+    } catch (e) { /* keep last known state */ }
+  }, 5000);
+}
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+
+async function init() {
+  setStatus('Connecting...');
+  try { state.gmsPublic = await publicGet('/fantasy/gms'); } catch (e) { state.gmsPublic = []; }
+
+  const linkGm = params.get('gm'), linkToken = params.get('token');
+  if (linkGm && linkToken) {
+    try {
+      const v = await apiFetch('/fantasy/gms/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ gmId: linkGm, token: linkToken }) });
+      state.gmId = v.id; state.gmName = v.name; state.gmToken = linkToken;
+      saveGmSession();
+      setStatus(`Logged in as ${state.gmName}`);
+      await loadBoardData();
+      startPolling();
+      return;
+    } catch (e) { /* fall through to normal login */ }
+  }
+
+  const saved = JSON.parse(localStorage.getItem('livedraft-gm') || 'null');
+  if (saved && saved.year === state.year) {
+    state.gmId = saved.gmId; state.gmToken = saved.gmToken; state.gmName = saved.gmName;
+    setStatus(`Logged in as ${state.gmName}`);
+    await loadBoardData();
+    startPolling();
+    return;
+  }
+
+  setStatus('Log in to view your board');
+  render();
+}
+
+async function loginAsGm() {
+  const gmId = document.getElementById('gm-select').value;
+  const token = document.getElementById('gm-token').value.trim();
+  const errEl = document.getElementById('gm-login-error');
+  errEl.textContent = '';
+  if (!gmId || !token) { errEl.textContent = 'Pick your name and enter your token.'; return; }
+  try {
+    const v = await apiFetch('/fantasy/gms/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ gmId, token }) });
+    state.gmId = v.id; state.gmName = v.name; state.gmToken = token;
+    saveGmSession();
+    setStatus(`Logged in as ${state.gmName}`);
+    await loadBoardData();
+    startPolling();
+  } catch (e) {
+    errEl.textContent = 'That token doesn\'t match — check with the commissioner.';
+  }
+}
+
+// ── Board mutations ──────────────────────────────────────────────
+async function saveBoard() {
+  try { await gmFetch(`/fantasy/livedraft/${state.year}/board`, 'PUT', { gmId: state.gmId, board: state.board }); }
+  catch (e) { /* board still reflects locally; next edit will retry the save */ }
+}
+function addToBoard(name) {
+  if (!name || state.board.includes(name)) return;
+  state.board.push(name);
+  render();
+  saveBoard();
+}
+function removeFromBoard(idx) {
+  state.board.splice(idx, 1);
+  render();
+  saveBoard();
+}
+function moveBoard(idx, dir) {
+  const j = idx + dir;
+  if (j < 0 || j >= state.board.length) return;
+  [state.board[idx], state.board[j]] = [state.board[j], state.board[idx]];
+  render();
+  saveBoard();
+}
+
+// ── Render ────────────────────────────────────────────────────
+function gmName(id) {
+  const g = state.gmsPublic.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (!state.gmId) { app.innerHTML = renderLogin(); attachLoginHandlers(); return; }
+  app.innerHTML = renderBoard();
+  attachBoardHandlers();
+}
+
+function renderLogin() {
+  return `
+    <div class="card">
+      <div class="card-title">GM Login</div>
+      <div class="field"><label>Your Name</label>
+        <select id="gm-select">
+          <option value="">Select...</option>
+          ${state.gmsPublic.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
+      <button class="btn btn-primary" id="gm-login-btn">Log In</button>
+      <div class="error-msg" id="gm-login-error"></div>
+      <div class="hint">Already logged into Live Draft on this device? This page picks that session up automatically — or use your commissioner-issued link (<code>?gm=id&amp;token=...</code>) directly.</div>
+    </div>
+  `;
+}
+function attachLoginHandlers() {
+  document.getElementById('gm-login-btn').onclick = loginAsGm;
+}
+
+function renderBoard() {
+  const picked = new Set(state.livedraft ? state.livedraft.picks.map(p => p.player) : []);
+  const pickerOf = {};
+  if (state.livedraft) for (const p of state.livedraft.picks) pickerOf[p.player] = p.gm;
+
+  const pool = state.playerPool || [];
+  const poolByName = {};
+  for (const p of pool) poolByName[p.name] = p;
+  const board = state.board || [];
+  const onBoard = new Set(board);
+  const addOptions = pool.filter(p => !onBoard.has(p.name)).sort((a, b) => a.name.localeCompare(b.name));
+
+  const rows = board.length ? board.map((name, i) => {
+    const p = poolByName[name];
+    const isPicked = picked.has(name);
+    const fmts = p ? [p.thu, p.fri, p.sat].filter(Boolean).join(' · ') : '';
+    const status = isPicked ? `taken by ${gmName(pickerOf[name])}` : fmts;
+    return `
+      <div class="board-row ${isPicked ? 'taken' : ''}">
+        <span class="board-rank">${i + 1}.</span>
+        <div class="board-name-wrap">
+          <div class="board-name">${name}</div>
+          <div class="board-status">${status}</div>
+        </div>
+        <button class="btn btn-sm" data-move="-1" data-idx="${i}">↑</button>
+        <button class="btn btn-sm" data-move="1" data-idx="${i}">↓</button>
+        <button class="btn btn-sm" data-remove="${i}">✕</button>
+      </div>`;
+  }).join('') : '<div class="hint" style="padding:14px">Your board is empty — add players below to start ranking them.</div>';
+
+  return `
+    <div class="card">
+      <div class="card-title">${state.gmName}'s Board — ${state.year}</div>
+      <div class="board-list">${rows}</div>
+      <div class="field" style="margin-top:12px">
+        <select id="board-add-select">
+          <option value="">Add player to board...</option>
+          ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="hint">This is the same board you can draft directly from in Live Draft when you're on the clock — changes here show up there immediately, and vice versa.</div>
+      <div class="links-row">
+        <a href="live-draft.html?year=${state.year}" target="_blank">Open Live Draft</a>
+        <a href="scouting.html" target="_blank">Open Scouting</a>
+        <span class="logout-link" id="logout-link">Log out / switch GM</span>
+      </div>
+    </div>
+  `;
+}
+function attachBoardHandlers() {
+  const boardAdd = document.getElementById('board-add-select');
+  if (boardAdd) boardAdd.onchange = () => { if (boardAdd.value) addToBoard(boardAdd.value); };
+  document.querySelectorAll('[data-move]').forEach(btn => {
+    btn.onclick = () => moveBoard(parseInt(btn.dataset.idx), parseInt(btn.dataset.move));
+  });
+  document.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.onclick = () => removeFromBoard(parseInt(btn.dataset.remove));
+  });
+  const logout = document.getElementById('logout-link');
+  if (logout) logout.onclick = clearSession;
+}
+
+init();
+</script>
+</body>
+</html>
