@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Scoring Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="records.js"></script>
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --red: #ff3450;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 1200px 700px at 10% -10%, rgba(255,52,80,0.16), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 100% 0%, rgba(218,179,94,0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 22px 28px;
+}
+
+/* HEADER STRIP */
+.strip {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--border); margin-bottom: 18px;
+}
+.strip-left { font-family: 'Oswald', sans-serif; font-weight: 600; color: var(--text-dim); font-size: 18px; letter-spacing: 1px; text-transform: uppercase; }
+.strip-title {
+  font-family: 'Oswald', sans-serif; font-weight: 800; text-transform: uppercase;
+  font-size: 34px; letter-spacing: 1px; text-align: center; flex: 1;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.day-pills { display: flex; gap: 8px; }
+.day-pill {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  padding: 5px 12px; border-radius: 100px; border: 1px solid var(--border); color: var(--text-mute);
+}
+.day-pill.final { border-color: #35d488; color: #35d488; }
+.day-pill.live { border-color: var(--red); color: var(--gold-bright); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+
+/* LEADERBOARD */
+.leaderboard-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; overflow: hidden; }
+.lb-row { display: flex; align-items: center; gap: 18px; }
+.lb-rank { font-family: 'Oswald', sans-serif; font-weight: 800; font-size: 26px; color: var(--text-mute); width: 46px; text-align: center; }
+.lb-row:first-child .lb-rank { color: var(--gold-bright); }
+.lb-name {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase; font-size: 20px;
+  width: 240px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lb-bar-wrap { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; height: 28px; }
+.lb-bar { height: 100%; background: linear-gradient(90deg, var(--red), var(--gold)); border-radius: 6px 0 0 6px; transition: width .6s ease; }
+.lb-days { color: var(--text-mute); font-size: 11px; width: 170px; flex-shrink: 0; }
+.lb-total { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--gold-bright); font-size: 22px; width: 90px; text-align: right; flex-shrink: 0; }
+
+.empty-msg { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-mute); font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* TICKER */
+.ticker-wrap {
+  border-top: 2px solid var(--border); margin-top: 16px; padding-top: 14px;
+  height: 42px; display: flex; align-items: center; overflow: hidden;
+}
+.ticker-item {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 19px; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--gold-bright); opacity: 0; transition: opacity .5s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
+}
+.ticker-item.show { opacity: 1; }
+.ticker-item .rec { color: var(--red); }
+</style>
+</head>
+<body>
+  <div class="strip">
+    <div class="strip-left" id="strip-left">Fantasy Draft</div>
+    <div class="strip-title" id="strip-title">Live Scoring</div>
+    <div class="day-pills" id="day-pills"></div>
+  </div>
+  <div class="leaderboard-wrap" id="leaderboard-wrap"></div>
+  <div class="ticker-wrap"><div class="ticker-item" id="ticker-item"></div></div>
+
+<script>
+const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+const params = new URLSearchParams(location.search);
+const YEAR = parseInt(params.get('year')) || 2026;
+const DAY_LABEL = { thu: 'Thu', fri: 'Fri', sat: 'Sat' };
+
+let gms = [];
+let recordsBook = null;
+let tickerItems = ['Loading...'];
+let tickerIndex = 0;
+let tickerTimer = null;
+
+function gmName(id) {
+  const g = gms.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  return res.json();
+}
+
+function renderStrip(ls) {
+  document.getElementById('strip-left').textContent = `${ls.year} Season`;
+  document.getElementById('day-pills').innerHTML = ['thu','fri','sat'].map(d => {
+    const dayData = ls.days[d] || { status: 'active', entries: [] };
+    const cls = dayData.status === 'final' ? 'final' : (dayData.entries.length ? 'live' : '');
+    return `<div class="day-pill ${cls}">${DAY_LABEL[d]}</div>`;
+  }).join('');
+}
+
+function renderLeaderboard(ls) {
+  const wrap = document.getElementById('leaderboard-wrap');
+  if (!ls.teams.length) {
+    wrap.innerHTML = '<div class="empty-msg">Waiting for a live draft to establish team rosters...</div>';
+    return;
+  }
+  const sorted = [...ls.teams].sort((a, b) => b.seasonTotal - a.seasonTotal);
+  const max = Math.max(1, ...sorted.map(t => t.seasonTotal));
+  wrap.innerHTML = sorted.map((t, i) => `
+    <div class="lb-row">
+      <div class="lb-rank">${i + 1}</div>
+      <div class="lb-name">${gmName(t.gm)}</div>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(t.seasonTotal / max) * 100}%"></div></div>
+      <div class="lb-days">Thu ${t.dayTotals.thu} · Fri ${t.dayTotals.fri} · Sat ${t.dayTotals.sat}</div>
+      <div class="lb-total">${t.seasonTotal}</div>
+    </div>
+  `).join('');
+}
+
+// Groups a day's raw entries into per-player totals, then by each player's
+// registered format for that day (from their roster registration), so we can
+// compare against RecordsBook's per-format all-time thresholds.
+function computeDayBreakdown(day, entries, teams) {
+  const formatOf = {};
+  for (const t of teams) for (const p of t.roster) formatOf[p.name] = p[day];
+  const totals = {};
+  for (const e of entries) totals[e.player] = (totals[e.player] || 0) + e.pts;
+  const byFormat = {};
+  for (const [player, pts] of Object.entries(totals)) {
+    const fmt = formatOf[player];
+    if (!fmt) continue;
+    (byFormat[fmt] = byFormat[fmt] || []).push({ player, pts });
+  }
+  return { totals, byFormat };
+}
+
+function buildTickerItems(ls) {
+  const items = [];
+  for (const day of ['thu', 'fri', 'sat']) {
+    const dayData = ls.days[day];
+    if (!dayData || !dayData.entries.length) continue;
+    const isFinal = dayData.status === 'final';
+    const { totals, byFormat } = computeDayBreakdown(day, dayData.entries, ls.teams);
+
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    if (sorted.length) {
+      const [player, pts] = sorted[0];
+      items.push(isFinal
+        ? `${DAY_LABEL[day]} Recap — ${player} led the day with ${pts} pts`
+        : `Live Leader (${DAY_LABEL[day]}) — ${player}, ${pts} pts`);
+    }
+
+    if (recordsBook) {
+      for (const [fmt, list] of Object.entries(byFormat)) {
+        const best = list.sort((a, b) => b.pts - a.pts)[0];
+        const record = recordsBook.formatHighScore && recordsBook.formatHighScore[fmt];
+        if (!record) continue;
+        const fmtLabel = RecordsBook.FMT_LABEL[fmt] || fmt;
+        if (best.pts >= record.pts) {
+          items.push(`<span class="rec">RECORD WATCH</span> — ${best.player} ${isFinal ? 'matched or broke' : 'is matching/beating'} the all-time ${fmtLabel} single-day record (${record.pts} pts, ${record.player} ${record.year})`);
+        } else if (record.pts - best.pts <= 3) {
+          items.push(`${best.player} closing in on the all-time ${fmtLabel} record — ${(record.pts - best.pts).toFixed(1)} pts behind ${record.player}'s ${record.pts} (${record.year})`);
+        }
+      }
+    }
+  }
+  return items.length ? items : ['Live scoring will appear here once entries start coming in'];
+}
+
+function showTickerItem() {
+  const el = document.getElementById('ticker-item');
+  el.classList.remove('show');
+  setTimeout(() => {
+    el.innerHTML = tickerItems[tickerIndex % tickerItems.length];
+    tickerIndex++;
+    requestAnimationFrame(() => el.classList.add('show'));
+  }, 400);
+}
+
+function startTicker() {
+  if (tickerTimer) return;
+  showTickerItem();
+  tickerTimer = setInterval(showTickerItem, 6000);
+}
+
+async function poll() {
+  try {
+    const ls = await fetchJson(`${API_BASE}/fantasy/livescore/${YEAR}`);
+    renderStrip(ls);
+    renderLeaderboard(ls);
+    tickerItems = buildTickerItems(ls);
+  } catch (e) {
+    document.getElementById('strip-title').textContent = 'Connection lost — retrying...';
+  }
+}
+
+async function init() {
+  try { gms = await fetchJson(`${API_BASE}/fantasy/gms`); } catch (e) { gms = []; }
+  try {
+    const db = await fetchJson(NATS_URL);
+    recordsBook = RecordsBook.compute(db);
+  } catch (e) { recordsBook = null; }
+
+  await poll();
+  setInterval(poll, 2500);
+  startTicker();
+}
+init();
+</script>
+</body>
+</html>

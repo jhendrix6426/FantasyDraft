@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Scoring — Fantasy Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --panel: #131317;
+  --panel-2: #1a1a20;
+  --border: #26262e;
+  --border-soft: #1c1c22;
+  --red: #ff3450;
+  --red-dim: #7a1424;
+  --gold: #dab35e;
+  --gold-bright: #f0d391;
+  --text: #eaeaef;
+  --text-dim: #8b8b98;
+  --text-mute: #4d4d58;
+  --cyan: #3ec7ff;
+  --green: #35d488;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scrollbar-color: var(--border) var(--bg); }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse 900px 500px at 12% -10%, rgba(255,52,80,0.14), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(218,179,94,0.10), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+.page { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+.hero { padding: 28px 4px 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 3px; color: var(--red);
+  background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
+  padding: 4px 10px; border-radius: 100px; margin-bottom: 10px;
+}
+.hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+h1 {
+  font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; font-size: 28px; line-height: 1.1; margin-bottom: 8px;
+  background: linear-gradient(100deg, var(--gold-bright), var(--gold) 55%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.status {
+  display: inline-block; color: var(--text-dim); font-size: 11px;
+  padding: 5px 12px; background: var(--panel); border: 1px solid var(--border-soft);
+  border-radius: 100px;
+}
+
+.card {
+  background: var(--panel); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 16px; position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--gold) 50%, var(--red));
+}
+.card-title {
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--gold); margin-bottom: 14px;
+}
+
+label { display: block; color: var(--text-mute); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-family: 'Oswald', sans-serif; font-weight: 500; margin-bottom: 5px; }
+select, input[type=text], input[type=password], textarea {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 11px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  width: 100%; border-radius: 6px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,52,80,0.15); }
+.field { margin-bottom: 14px; }
+
+button.btn {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1px; padding: 10px 18px;
+  border-radius: 100px; cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+button.btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+button.btn:disabled { opacity: .4; cursor: default; }
+button.btn-primary { background: var(--red); border-color: var(--red); color: #fff; }
+button.btn-primary:hover:not(:disabled) { background: #ff4d66; border-color: #ff4d66; color: #fff; }
+button.btn-sm { padding: 6px 12px; font-size: 10px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.error-msg { color: var(--red); font-size: 12px; margin-top: 8px; }
+.hint { color: var(--text-mute); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+
+.day-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.day-tab {
+  flex: 1; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border-soft);
+  font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+}
+.day-tab.active { background: var(--panel-2); border-color: var(--gold); color: var(--gold-bright); }
+.day-tab .sub { display: block; font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 10px; color: var(--text-mute); text-transform: none; letter-spacing: 0; margin-top: 3px; }
+.day-tab.final .sub { color: var(--green); }
+
+.final-banner {
+  background: rgba(53,212,136,0.1); border: 1px solid var(--green); border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.final-banner .msg { color: var(--green); font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+
+.player-list { max-height: 480px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; }
+.player-row { border-bottom: 1px solid var(--border-soft); }
+.player-row:last-child { border-bottom: none; }
+.player-row:nth-child(even) { background: rgba(255,255,255,0.012); }
+.player-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
+.player-name { font-weight: 600; cursor: pointer; }
+.player-meta { color: var(--text-mute); font-size: 10px; }
+.player-pts { color: var(--gold-bright); font-weight: 700; margin-left: 8px; }
+.result-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+.result-btn {
+  padding: 6px 10px; font-size: 9px; border-radius: 100px; cursor: pointer;
+  font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+}
+.result-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-bright); }
+.result-btn:disabled { opacity: .4; cursor: default; }
+.result-win { border-color: rgba(53,212,136,0.4); }
+.result-timeoutWin { border-color: rgba(62,199,255,0.4); }
+.result-timeoutTie { border-color: rgba(218,179,94,0.4); }
+.result-timeoutLoss { border-color: rgba(255,140,60,0.4); }
+.result-loss { border-color: rgba(255,52,80,0.3); }
+
+.entry-history { padding: 0 14px 10px; display: none; }
+.entry-history.open { display: block; }
+.entry-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 0; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid var(--border-soft);
+}
+.entry-row:last-child { border-bottom: none; }
+.entry-del { color: var(--red); cursor: pointer; font-size: 11px; }
+.entry-del:hover { color: #ff8a9b; }
+
+.standings-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.standings-table th {
+  text-align: left; padding: 8px 10px; color: var(--gold); font-family: 'Oswald', sans-serif;
+  font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border);
+}
+.standings-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); }
+.standings-table .gm-name { font-weight: 600; }
+.standings-table .season-total { color: var(--gold-bright); font-weight: 700; }
+
+.logout-link { color: var(--text-mute); font-size: 11px; cursor: pointer; text-decoration: underline; }
+.logout-link:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="hero-tag">Live Scoring</div>
+    <h1 id="page-title">Fantasy Draft — Scoring</h1>
+    <div class="status" id="status">Loading...</div>
+  </header>
+
+  <div id="app"></div>
+</div>
+
+<script>
+const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+const RESULT_LABELS = { win: 'Win', timeoutWin: 'TO Win', timeoutTie: 'TO Tie', timeoutLoss: 'TO Loss', loss: 'Loss' };
+const RESULT_ORDER = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss'];
+const DAY_LABEL = { thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
+
+const params = new URLSearchParams(location.search);
+const state = {
+  year: parseInt(params.get('year')) || 2026,
+  loggedIn: false,
+  scorekeeperKey: null,
+  livescore: null,      // last fetched /fantasy/livescore/:year response
+  gmsPublic: [],
+  day: 'thu',
+  search: '',            // player search text, model-synced (see note on render())
+  openHistory: null,     // player name whose entry history is expanded, or null
+  submitting: false,
+  error: null,
+  pollTimer: null,
+};
+
+// ── API helpers ──────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+const publicGet = (path) => apiFetch(path, { method: 'GET' });
+const skFetch = (path, method, body) => apiFetch(path, {
+  method, headers: { 'Content-Type': 'application/json', 'X-Scorekeeper-Key': state.scorekeeperKey },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+});
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// ── Session persistence ──────────────────────────────────────
+function saveSession() {
+  localStorage.setItem('livescoring-sk', JSON.stringify({ scorekeeperKey: state.scorekeeperKey, year: state.year }));
+}
+function clearSession() {
+  localStorage.removeItem('livescoring-sk');
+  location.reload();
+}
+// Any authenticated call rejected with a 401 means the stored key is wrong
+// (e.g. mistyped at login, or rotated) — force back to the login screen
+// rather than silently failing on every subsequent action.
+function handleAuthFailure() {
+  state.loggedIn = false;
+  state.scorekeeperKey = null;
+  localStorage.removeItem('livescoring-sk');
+  stopPolling();
+  setStatus('Scorekeeper key rejected — please log in again');
+  render();
+}
+
+// ── Polling ───────────────────────────────────────────────────
+async function fetchLivescore() {
+  try {
+    state.livescore = await publicGet(`/fantasy/livescore/${state.year}`);
+    state.error = null;
+  } catch (e) {
+    state.error = 'Could not reach the server: ' + e.message;
+  }
+  render();
+}
+function startPolling() {
+  stopPolling();
+  fetchLivescore();
+  state.pollTimer = setInterval(fetchLivescore, 3000);
+}
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopPolling();
+  else if (state.loggedIn) startPolling();
+});
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  setStatus('Connecting...');
+  try {
+    state.gmsPublic = await publicGet('/fantasy/gms');
+  } catch (e) {
+    state.gmsPublic = [];
+  }
+
+  const saved = JSON.parse(localStorage.getItem('livescoring-sk') || 'null');
+  if (saved && saved.year === state.year) {
+    state.loggedIn = true;
+    state.scorekeeperKey = saved.scorekeeperKey;
+    setStatus('Logged in as Scorekeeper');
+    startPolling();
+    return;
+  }
+
+  setStatus('Log in to start entering scores');
+  render();
+}
+
+// ── Login ──────────────────────────────────────────────────────
+// There's no dedicated verify endpoint — the key is accepted optimistically
+// and only actually checked the first time a real POST is made. A wrong key
+// surfaces as a 401 on that first submit (see handleAuthFailure) rather than
+// at login time, which keeps this page from needing its own auth-only route.
+function login() {
+  const key = document.getElementById('sk-key').value;
+  if (!key) {
+    document.getElementById('login-error').textContent = 'Enter the scorekeeper passphrase.';
+    return;
+  }
+  state.loggedIn = true;
+  state.scorekeeperKey = key;
+  saveSession();
+  setStatus('Logged in as Scorekeeper');
+  startPolling();
+}
+
+// ── Entry actions ────────────────────────────────────────────
+async function submitEntry(player, result) {
+  if (state.submitting) return;
+  state.submitting = true; render();
+  try {
+    await skFetch(`/fantasy/livescore/${state.year}/entry`, 'POST', { day: state.day, player, result });
+    state.error = null;
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) { state.submitting = false; return handleAuthFailure(); }
+    state.error = e.message;
+  }
+  state.submitting = false;
+  await fetchLivescore();
+}
+
+async function deleteEntry(entryId) {
+  try {
+    await skFetch(`/fantasy/livescore/${state.year}/entry/${entryId}`, 'DELETE');
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) return handleAuthFailure();
+    state.error = e.message;
+  }
+  await fetchLivescore();
+}
+
+async function finalizeDay() {
+  if (!confirm(`Finalize ${DAY_LABEL[state.day]}? You can unfinalize later if needed.`)) return;
+  try {
+    await skFetch(`/fantasy/livescore/${state.year}/${state.day}/finalize`, 'POST');
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) return handleAuthFailure();
+    state.error = e.message;
+  }
+  await fetchLivescore();
+}
+async function unfinalizeDay() {
+  try {
+    await skFetch(`/fantasy/livescore/${state.year}/${state.day}/unfinalize`, 'POST');
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) return handleAuthFailure();
+    state.error = e.message;
+  }
+  await fetchLivescore();
+}
+
+// ── Render ────────────────────────────────────────────────────
+function gmName(id) {
+  const g = state.gmsPublic.find(g => g.id === id);
+  return g ? g.name : id;
+}
+
+function render() {
+  const app = document.getElementById('app');
+
+  // Same focus-preservation used in live-draft.html's commissioner view:
+  // polling re-renders the whole app on a timer, which would otherwise steal
+  // focus/reset the search box mid-keystroke. Snapshot + restore around it.
+  const active = document.activeElement;
+  let focused = null;
+  if (active && active.id && app.contains(active) && 'value' in active) {
+    focused = { id: active.id, value: active.value, selStart: active.selectionStart, selEnd: active.selectionEnd };
+  }
+
+  app.innerHTML = state.loggedIn ? renderMain() : renderLogin();
+  if (state.loggedIn) attachMainHandlers(); else attachLoginHandlers();
+
+  if (focused) {
+    const el = document.getElementById(focused.id);
+    if (el && 'value' in el) {
+      el.value = focused.value;
+      el.focus();
+      if (focused.selStart != null && el.setSelectionRange) {
+        try { el.setSelectionRange(focused.selStart, focused.selEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function renderLogin() {
+  return `
+    <div class="card">
+      <div class="card-title">Scorekeeper Login</div>
+      <div class="field"><label>Passphrase</label><input type="password" id="sk-key"></div>
+      <button class="btn btn-primary" id="login-btn">Log In</button>
+      <div class="error-msg" id="login-error"></div>
+    </div>
+  `;
+}
+function attachLoginHandlers() {
+  document.getElementById('login-btn').onclick = login;
+  document.getElementById('sk-key').onkeydown = (e) => { if (e.key === 'Enter') login(); };
+}
+
+function renderMain() {
+  const ls = state.livescore;
+  if (!ls) return '<div class="card">Loading scoring data...</div>';
+
+  const dayTabs = `
+    <div class="day-tabs">
+      ${['thu','fri','sat'].map(d => {
+        const dayData = ls.days[d] || { status: 'active', entries: [] };
+        const isFinal = dayData.status === 'final';
+        return `<div class="day-tab ${d === state.day ? 'active' : ''} ${isFinal ? 'final' : ''}" data-day="${d}">
+          ${DAY_LABEL[d]}
+          <span class="sub">${isFinal ? 'Finalized' : dayData.entries.length + ' entries'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  const dayData = ls.days[state.day] || { status: 'active', entries: [] };
+  const isFinal = dayData.status === 'final';
+
+  const finalBanner = isFinal ? `
+    <div class="final-banner">
+      <span class="msg">${DAY_LABEL[state.day]} is finalized</span>
+      <button class="btn btn-sm" id="unfinalize-btn">Unfinalize</button>
+    </div>` : '';
+
+  // Flatten every team's roster into one list, tagged with gm, filtered to
+  // players actually registered for the selected day.
+  const allPlayers = [];
+  for (const team of ls.teams) {
+    for (const p of team.roster) {
+      if (p[state.day]) allPlayers.push({ ...p, gm: team.gm });
+    }
+  }
+
+  const entryContent = isFinal ? '' : `
+    <div class="card">
+      <div class="card-title">Enter Results — ${DAY_LABEL[state.day]}</div>
+      <div class="field"><input type="text" id="player-search" placeholder="Search players..." value="${state.search.replace(/"/g,'&quot;')}"></div>
+      <div class="player-list" id="player-list">${renderPlayerRows(allPlayers, dayData.entries)}</div>
+      <div class="btn-row"><button class="btn" id="finalize-btn">Finalize ${DAY_LABEL[state.day]}</button></div>
+    </div>
+  `;
+
+  const standings = `
+    <div class="card">
+      <div class="card-title">Standings</div>
+      <table class="standings-table">
+        <thead><tr><th>GM</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Total</th></tr></thead>
+        <tbody>
+          ${[...ls.teams].sort((a,b) => b.seasonTotal - a.seasonTotal).map(t => `
+            <tr>
+              <td class="gm-name">${gmName(t.gm)}</td>
+              <td>${t.dayTotals.thu}</td>
+              <td>${t.dayTotals.fri}</td>
+              <td>${t.dayTotals.sat}</td>
+              <td class="season-total">${t.seasonTotal}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return `
+    ${dayTabs}
+    ${finalBanner}
+    ${entryContent}
+    ${standings}
+    ${state.error ? `<div class="error-msg">${state.error}</div>` : ''}
+    <div style="margin-top:16px"><span class="logout-link" id="logout-link">Log out</span></div>
+  `;
+}
+
+function renderPlayerRows(players, dayEntries) {
+  const f = state.search.toLowerCase();
+  const filtered = f ? players.filter(p => p.name.toLowerCase().includes(f)) : players;
+  if (!filtered.length) return '<div class="hint" style="padding:14px">No players match.</div>';
+
+  return filtered.map(p => {
+    const entries = dayEntries.filter(e => e.player === p.name);
+    const total = entries.reduce((s, e) => s + e.pts, 0);
+    const isOpen = state.openHistory === p.name;
+    return `
+      <div class="player-row">
+        <div class="player-main">
+          <div>
+            <span class="player-name" data-toggle-history="${p.name.replace(/"/g,'&quot;')}">${p.name}</span>
+            ${entries.length ? `<span class="player-pts">${total} pts</span> <span class="player-meta">(${entries.length}x)</span>` : '<span class="player-meta">no entries yet</span>'}
+          </div>
+          <div class="result-btns">
+            ${RESULT_ORDER.map(r => `<button class="result-btn result-${r}" data-player="${p.name.replace(/"/g,'&quot;')}" data-result="${r}" ${state.submitting ? 'disabled' : ''}>${RESULT_LABELS[r]}</button>`).join('')}
+          </div>
+        </div>
+        <div class="entry-history ${isOpen ? 'open' : ''}">
+          ${entries.map(e => `
+            <div class="entry-row">
+              <span>${RESULT_LABELS[e.result]} — ${e.pts} pts</span>
+              <span class="entry-del" data-delete-entry="${e.id}">Remove</span>
+            </div>`).join('') || '<div class="hint">No entries yet.</div>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function attachMainHandlers() {
+  document.querySelectorAll('[data-day]').forEach(el => {
+    el.onclick = () => { state.day = el.dataset.day; state.openHistory = null; render(); };
+  });
+
+  const search = document.getElementById('player-search');
+  if (search) search.oninput = () => { state.search = search.value; render(); };
+
+  document.querySelectorAll('[data-toggle-history]').forEach(el => {
+    el.onclick = () => { state.openHistory = state.openHistory === el.dataset.toggleHistory ? null : el.dataset.toggleHistory; render(); };
+  });
+
+  document.querySelectorAll('.result-btn').forEach(btn => {
+    btn.onclick = () => submitEntry(btn.dataset.player, btn.dataset.result);
+  });
+
+  document.querySelectorAll('[data-delete-entry]').forEach(el => {
+    el.onclick = () => deleteEntry(el.dataset.deleteEntry);
+  });
+
+  const finalizeBtn = document.getElementById('finalize-btn');
+  if (finalizeBtn) finalizeBtn.onclick = finalizeDay;
+  const unfinalizeBtn = document.getElementById('unfinalize-btn');
+  if (unfinalizeBtn) unfinalizeBtn.onclick = unfinalizeDay;
+
+  const logout = document.getElementById('logout-link');
+  if (logout) logout.onclick = clearSession;
+}
+
+init();
+</script>
+</body>
+</html>
