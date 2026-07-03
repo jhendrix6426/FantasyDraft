@@ -13,11 +13,21 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
 
 ## Structure
 
-- `index.html` — landing page: header banner + tab bar (Scouting, Live Draft,
-  Live Scoring, Draft History, Records). Tab-switching JS lives inline at the
-  bottom of the file — clicking a `nav.tabs button` swaps `#tab-frame`'s `src`
-  to `data-tab + '.html'`. Adding another tab is just a new button with a
-  matching `data-tab` and HTML file. This header only wraps a page when it's
+- `index.html` — landing page: header banner + tab bar (GM Tools, Live Draft,
+  Live Scoring, Draft History, Records). "GM Tools" is a `.tab-group` — click
+  opens a `.tab-dropdown` with two sub-tabs (Scouting, My Draft Board) rather
+  than loading a page directly; the toggle button gets `.active` whenever
+  either sub-tab's page is loaded, same visual treatment as a normal tab. The
+  other four are plain buttons. Tab-switching JS lives inline at the bottom of
+  the file — clicking any `[data-tab]` button swaps `#tab-frame`'s `src` to
+  `data-tab + '.html'`. Adding another plain top-level tab is just a new
+  button with a matching `data-tab` and HTML file; adding another GM Tools
+  sub-tab is a new button inside `#gm-tools-dropdown` plus adding its
+  `data-tab` value to `gmToolsTabNames`. The dropdown closes on an outside
+  click *or* on a click into `#tab-frame` — the latter needs its own handling
+  (`window`'s `blur` event) since a click inside an iframe never bubbles to
+  the parent document, so a plain document-level click listener alone can't
+  catch it. This header only wraps a page when it's
   reached *through* the tab bar (i.e. loaded inside `#tab-frame`) — GMs reach
   `live-draft.html`/`my-board.html` via a direct shareable link instead, which
   bypasses `index.html` entirely. Those pages (plus `live-scoring.html`, which
@@ -218,6 +228,11 @@ real stats, not just names. `my-board.html` is the same board panel as
 turn-order UI, for GMs who want their board open separately from both the
 stats table and the draft itself — it also accepts a direct `?gm=...&token=...`
 link, not just the shared session, so it works standalone on a fresh device.
+Three ways to reach it: `index.html`'s GM Tools dropdown, a gold "My Draft
+Board" pill next to the "Scouting Portal" tag in `scouting.html`'s header
+(`.hero-link-pill` — a differently-colored sibling of the red `.hero-tag`, so
+it doesn't read as the same kind of static status label), or the "Open as
+Standalone Page" button in `live-draft.html`'s board panel.
 
 **Resetting a draft**: `POST /fantasy/livedraft/:year/reset` (commish auth)
 hard-resets `livedraft_<year>` back to the pre-draft default (no draft order,

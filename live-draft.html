@@ -702,7 +702,10 @@ function renderBoardPanel(picked, pickerOf, canDraftFromBoard) {
           ${addOptions.map(p => `<option value="${p.name.replace(/"/g, '&quot;')}">${p.name}</option>`).join('')}
         </select>
       </div>
-      <div class="hint"><a href="my-board.html?year=${state.year}" target="_blank" style="color:var(--cyan)">Open as a standalone page</a> — same board, useful for keeping it up on its own tab or device while you scout.</div>
+      <div class="btn-row" style="margin-top:12px">
+        <a class="btn btn-sm" href="my-board.html?year=${state.year}" target="_blank">Open as Standalone Page</a>
+      </div>
+      <div class="hint">Same board — useful for keeping it up on its own tab or device while you scout.</div>
     </div>`;
 }
 

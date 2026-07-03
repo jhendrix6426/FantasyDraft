@@ -41,14 +41,23 @@ body {
 
 /* HERO */
 .hero { padding: 32px 4px 22px; margin-bottom: 22px; border-bottom: 1px solid var(--border); position: relative; }
+.hero-tag-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .hero-tag {
   display: inline-flex; align-items: center; gap: 6px;
   font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
   text-transform: uppercase; letter-spacing: 3px; color: var(--red);
   background: rgba(255,52,80,0.1); border: 1px solid var(--red-dim);
-  padding: 4px 10px; border-radius: 100px; margin-bottom: 12px;
+  padding: 4px 10px; border-radius: 100px;
 }
 .hero-tag::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+.hero-link-pill {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+  font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--gold);
+  background: rgba(218,179,94,0.10); border: 1px solid rgba(218,179,94,0.35);
+  padding: 4px 10px; border-radius: 100px; transition: border-color .15s, color .15s, background .15s;
+}
+.hero-link-pill:hover { border-color: var(--gold-bright); color: var(--gold-bright); background: rgba(218,179,94,0.16); }
 h1 {
   font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: 1px; font-size: 34px; line-height: 1.1; margin-bottom: 10px;
@@ -246,7 +255,10 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 <body>
 <div class="page">
 <header class="hero">
-  <div class="hero-tag">Scouting Portal</div>
+  <div class="hero-tag-row">
+    <div class="hero-tag">Scouting Portal</div>
+    <a class="hero-link-pill" href="my-board.html" target="_blank">My Draft Board</a>
+  </div>
   <h1>2026 Fantasy Draft</h1>
   <div class="status" id="status">Loading Nationals history...</div>
 </header>

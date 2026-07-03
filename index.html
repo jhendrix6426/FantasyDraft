@@ -80,6 +80,26 @@
     color: #eaeaef;
     background: rgba(255,255,255,0.04);
   }
+  .tab-group { position: relative; }
+  .tab-dropdown {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: #1a1a20;
+    border: 1px solid #26262e;
+    border-radius: 10px;
+    padding: 6px;
+    min-width: 170px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    z-index: 20;
+  }
+  .tab-dropdown.open { display: flex; }
+  .tab-dropdown button {
+    text-align: left;
+  }
   main {
     flex: 1;
     background: #131317;
@@ -98,7 +118,13 @@
     <img src="assets/header.png" alt="Fantasy Draft">
   </div>
   <nav class="tabs">
-    <button class="active" data-tab="scouting">Scouting</button>
+    <div class="tab-group">
+      <button class="active" id="gm-tools-toggle" type="button">GM Tools &#9662;</button>
+      <div class="tab-dropdown" id="gm-tools-dropdown">
+        <button class="active" data-tab="scouting">Scouting</button>
+        <button data-tab="my-board">My Draft Board</button>
+      </div>
+    </div>
     <button data-tab="live-draft">Live Draft</button>
     <button data-tab="live-scoring">Live Scoring</button>
     <button data-tab="draft-history">Draft History</button>
@@ -109,15 +135,44 @@
   <iframe id="tab-frame" src="scouting.html" title="Scouting"></iframe>
 </main>
 <script>
-  document.querySelectorAll('nav.tabs button').forEach(btn => {
+  const tabFrame = document.getElementById('tab-frame');
+  const gmToolsToggle = document.getElementById('gm-tools-toggle');
+  const gmToolsDropdown = document.getElementById('gm-tools-dropdown');
+  const topLevelTabs = document.querySelectorAll('nav.tabs > button[data-tab]');
+  const gmToolsItems = gmToolsDropdown.querySelectorAll('button[data-tab]');
+  const gmToolsTabNames = ['scouting', 'my-board'];
+
+  function setActiveTab(btn) {
+    if (btn.disabled || btn.classList.contains('active')) return;
+    topLevelTabs.forEach(b => b.classList.remove('active'));
+    gmToolsItems.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gmToolsToggle.classList.toggle('active', gmToolsTabNames.includes(btn.dataset.tab));
+    tabFrame.src = btn.dataset.tab + '.html';
+    tabFrame.title = btn.textContent;
+  }
+
+  topLevelTabs.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn)));
+  gmToolsItems.forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.disabled || btn.classList.contains('active')) return;
-      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const frame = document.getElementById('tab-frame');
-      frame.src = btn.dataset.tab + '.html';
-      frame.title = btn.textContent;
+      setActiveTab(btn);
+      gmToolsDropdown.classList.remove('open');
     });
+  });
+
+  gmToolsToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    gmToolsDropdown.classList.toggle('open');
+  });
+  gmToolsDropdown.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => gmToolsDropdown.classList.remove('open'));
+  // A click inside the tab iframe never bubbles to this document (it's a
+  // separate document), so the listener above alone can't close the dropdown
+  // when clicking into the page content — which is most of the visible page.
+  // A click into the iframe shifts window focus there, firing blur on the
+  // parent window; use that as the close signal instead.
+  window.addEventListener('blur', () => {
+    if (document.activeElement === tabFrame) gmToolsDropdown.classList.remove('open');
   });
 </script>
 </body>
