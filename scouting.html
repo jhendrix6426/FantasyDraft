@@ -202,6 +202,16 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 .board-btn.board-remove:hover { border-color: var(--red); color: var(--red); }
 .board-on { color: var(--gold-bright); font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
 .board-hint { color: var(--text-mute); font-size: 11px; }
+
+.board-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-left: 6px; padding: 0; vertical-align: middle;
+  font-size: 11px; line-height: 1; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-mute);
+  cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+.board-icon-btn:hover { border-color: var(--gold); color: var(--gold-bright); }
+.board-icon-btn.on-board { border-color: var(--gold); background: rgba(218,179,94,0.15); color: var(--gold-bright); }
 .board-hint a { color: var(--cyan); }
 .modal-body { padding: 18px 22px; }
 .modal-section { margin-bottom: 22px; }
@@ -361,6 +371,10 @@ async function loadGmBoardSession() {
     const data = await res.json();
     if (res.ok) gmBoard = data.board || [];
   } catch (e) { /* board control just won't show yet if this fails */ }
+  // This races against the main Nats-history fetch in init() — whichever
+  // finishes first renders a table without board icons. Re-render once this
+  // resolves so the icons always show up without needing a manual re-sort.
+  if (typeof renderTable === 'function') renderTable();
 }
 
 async function saveGmBoard() {
@@ -391,6 +405,30 @@ function toggleBoard(name) {
   if (idx === -1) gmBoard.push(name); else gmBoard.splice(idx, 1);
   saveGmBoard();
   renderBoardControl(name);
+  // Keep this player's row icon (if currently rendered) in sync too — the
+  // reverse of toggleBoardIcon() updating the modal.
+  const rowIcon = document.querySelector(`.board-icon-btn[data-name="${CSS.escape(name)}"]`);
+  if (rowIcon) rowIcon.outerHTML = renderBoardIcon(name);
+}
+
+// Compact per-row equivalent of the modal's board control, so a GM can add/
+// remove a player without opening the modal every time. Only rendered once
+// a GM session exists; toggling updates just this one button (not a full
+// table re-render, which would lose sort/scroll position) plus the modal's
+// own control if that same player happens to be open in it.
+function renderBoardIcon(name) {
+  if (!gmSession) return '';
+  const onBoard = gmBoard.includes(name);
+  return `<button class="board-icon-btn ${onBoard ? 'on-board' : ''}" data-name="${name.replace(/"/g, '&quot;')}" title="${onBoard ? 'Remove from' : 'Add to'} My Draft Board" onclick="event.stopPropagation();toggleBoardIcon(this)">${onBoard ? '★' : '+'}</button>`;
+}
+function toggleBoardIcon(btn) {
+  const name = btn.dataset.name;
+  const idx = gmBoard.indexOf(name);
+  if (idx === -1) gmBoard.push(name); else gmBoard.splice(idx, 1);
+  saveGmBoard();
+  btn.outerHTML = renderBoardIcon(name);
+  const modalOpen = document.getElementById('player-modal').classList.contains('open');
+  if (modalOpen && document.getElementById('m-name').textContent === name) renderBoardControl(name);
 }
 
 const FMT_MAP = {
@@ -712,7 +750,7 @@ function totalCell(s) {
 // ── CUSTOMIZABLE COLUMNS ─────────────────────────────────────
 const COLUMN_DEFS = [
   {id:'player', label:'Player', sortKey:'name', required:true,
-    render:p=>`<td><button class="name-btn" data-name="${p.name.replace(/"/g,'&quot;')}" onclick="openModal(this.dataset.name)">${p.name}</button>${p.firstNats?'<span class="first-nats">1st</span>':''}</td>`},
+    render:p=>`<td><button class="name-btn" data-name="${p.name.replace(/"/g,'&quot;')}" onclick="openModal(this.dataset.name)">${p.name}</button>${renderBoardIcon(p.name)}${p.firstNats?'<span class="first-nats">1st</span>':''}</td>`},
   {id:'thuFmt', label:'Thu', render:p=>`<td>${fmtTag(p.thu)}</td>`},
   {id:'friFmt', label:'Fri', render:p=>`<td>${fmtTag(p.fri)}</td>`},
   {id:'satFmt', label:'Sat', render:p=>`<td>${fmtTag(p.sat)}</td>`},

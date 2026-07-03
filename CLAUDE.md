@@ -286,7 +286,18 @@ plumbing — logging in on one logs you in on the others. `scouting.html`'s
 per-player modal reads this session (read-only glance, no login flow lives
 there) and shows an "Add to My Draft Board" / "Remove" toggle scoped to
 whichever GM is logged in, so a GM can build their board while looking at the
-real stats, not just names. `my-board.html` is the same board panel as
+real stats, not just names. The same toggle also has a compact one-click
+equivalent right in the table — a small circular `+`/`★` button
+(`renderBoardIcon()`) next to each player's name in the `player` column,
+for adding without opening the modal every time. Both controls share the
+same `gmBoard` array and stay in sync with each other: `toggleBoardIcon()`
+(row → modal) and `toggleBoard()` (modal → row) each patch the *other*
+control in place via `outerHTML`/`CSS.escape`-scoped `querySelector`,
+rather than a full `renderTable()`, so toggling doesn't reset sort/scroll
+position or require a page-load-order-safe re-render like the initial
+icon appearance does (see `loadGmBoardSession()`'s trailing `renderTable()`
+call, needed because it races the main Nats-history fetch in `init()`).
+`my-board.html` is the same board panel as
 `live-draft.html`'s (full add/reorder/remove), minus the Draft button and
 turn-order UI, for GMs who want their board open separately from both the
 stats table and the draft itself — it also accepts a direct `?gm=...&token=...`
