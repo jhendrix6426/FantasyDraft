@@ -429,10 +429,10 @@ via `oninput` — without both halves of that fix, the 3s poll loop steals
 focus and blanks the search box mid-keystroke, exactly like the bug already
 hit and fixed in the draft's commissioner GM-roster editor.
 
-**Three related bugs found during pre-event testing, all variations on the
-same root cause** (something rebuilds an input's DOM value from stale
-in-memory state while the user is mid-edit) **— fixed in `live-draft.html`
-and `my-board.html`:**
+**Four related bugs found during pre-event testing, all variations on the
+same root cause** (something rebuilds part of the DOM from stale state while
+the user is mid-interaction) **— fixed in `live-draft.html` and
+`my-board.html`:**
 - The GM player-search box wasn't actually model-synced (unlike
   `live-scoring.html`'s, which was correct from the start) — `renderGmView()`
   called `renderPlayerRows(available)` with no filter, so every 3s poll
@@ -464,6 +464,19 @@ and `my-board.html`:**
   at all. Fixed the same way as `id`/`name`: an `oninput` writing to
   `r.username`. If you add another editable field to a GM row, it needs this
   same handler, or it has this bug from day one.
+- Two scrollable lists — the board modal's `.board-list` and the GM view's
+  `#player-list` (Available Players) — reset to `scrollTop: 0` on every ~3s
+  poll tick, reading as "scrolling down snaps back to the top after a few
+  seconds." Replacing an element's `innerHTML` always resets its scroll
+  position, and scrolling isn't "interacting with a form" so the
+  `isInteractingWithForm()` guard above doesn't help here — it only skips a
+  render entirely, it doesn't make an *executed* render scroll-safe. Fixed by
+  snapshotting `scrollTop` right before the `innerHTML` rebuild and restoring
+  it right after, in both `render()` (for `#player-list`) and
+  `renderBoardModalContent()` (for `#board-modal-body` *and* the `.board-list`
+  nested inside it — two separate scroll containers, both need it). Any new
+  scrollable list rebuilt on a timer needs this same snapshot/restore, same
+  as any new form field needs the model-sync/`oninput` fixes above.
 
 **Drafting a player requires confirming a native `confirm()` dialog** ("Draft
 {name}?") in `submitPick()` — covers both the main available-players list and

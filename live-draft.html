@@ -665,6 +665,15 @@ function render() {
     focused = { id: active.id, value: active.value, selStart: active.selectionStart, selEnd: active.selectionEnd };
   }
 
+  // Same problem as the focused-input case above, but for scroll position:
+  // rebuilding #app's innerHTML resets any nested scrollable container back
+  // to scrollTop 0. Scrolling doesn't count as "interacting with a form", so
+  // the poll guard doesn't skip this render — without restoring it here, the
+  // Available Players list snaps back to the top on every ~3s poll tick
+  // while a GM is mid-scroll.
+  const playerListEl = document.getElementById('player-list');
+  const playerListScroll = playerListEl ? playerListEl.scrollTop : null;
+
   if (!state.role) { app.innerHTML = renderLanding(); attachLandingHandlers(); }
   else if (state.role === 'gm') { app.innerHTML = renderGmView(); attachGmHandlers(); }
   else if (state.role === 'commish') { app.innerHTML = renderCommishView(); attachCommishHandlers(); }
@@ -678,6 +687,11 @@ function render() {
         try { el.setSelectionRange(focused.selStart, focused.selEnd); } catch (e) {}
       }
     }
+  }
+
+  if (playerListScroll !== null) {
+    const newPlayerListEl = document.getElementById('player-list');
+    if (newPlayerListEl) newPlayerListEl.scrollTop = playerListScroll;
   }
 
   // The board modal lives outside #app (so it survives the innerHTML swap
@@ -857,7 +871,18 @@ function renderBoardModalContent() {
   const rows = board.length ? board.map((name, i) => renderBoardRow(name, i, poolByName, picked, pickerOf, canDraftFromBoard, true)).join('')
     : '<div class="hint">Your board is empty — add players below to start ranking them.</div>';
 
-  document.getElementById('board-modal-body').innerHTML = `
+  // This gets called on every ~3s poll tick while the modal is open (see
+  // render()'s note above), and replacing innerHTML always resets a
+  // scrollable container's scrollTop to 0 — with a long board, that reads
+  // as the whole modal snapping back to the top mid-scroll every few
+  // seconds. Snapshot both nested scroll containers (.modal-body itself and
+  // .board-list inside it) and restore after rebuilding.
+  const modalBody = document.getElementById('board-modal-body');
+  const outerScroll = modalBody.scrollTop;
+  const prevList = modalBody.querySelector('.board-list');
+  const innerScroll = prevList ? prevList.scrollTop : 0;
+
+  modalBody.innerHTML = `
     <div class="board-list">${rows}</div>
     <div class="field" style="margin-top:12px">
       <select id="board-modal-add-select">
@@ -867,6 +892,10 @@ function renderBoardModalContent() {
     </div>
   `;
   attachBoardModalHandlers();
+
+  modalBody.scrollTop = outerScroll;
+  const newList = modalBody.querySelector('.board-list');
+  if (newList) newList.scrollTop = innerScroll;
 }
 
 function openBoardModal() {
