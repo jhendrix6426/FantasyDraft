@@ -464,19 +464,24 @@ the user is mid-interaction) **— fixed in `live-draft.html` and
   at all. Fixed the same way as `id`/`name`: an `oninput` writing to
   `r.username`. If you add another editable field to a GM row, it needs this
   same handler, or it has this bug from day one.
-- Two scrollable lists — the board modal's `.board-list` and the GM view's
-  `#player-list` (Available Players) — reset to `scrollTop: 0` on every ~3s
-  poll tick, reading as "scrolling down snaps back to the top after a few
-  seconds." Replacing an element's `innerHTML` always resets its scroll
-  position, and scrolling isn't "interacting with a form" so the
-  `isInteractingWithForm()` guard above doesn't help here — it only skips a
-  render entirely, it doesn't make an *executed* render scroll-safe. Fixed by
-  snapshotting `scrollTop` right before the `innerHTML` rebuild and restoring
-  it right after, in both `render()` (for `#player-list`) and
-  `renderBoardModalContent()` (for `#board-modal-body` *and* the `.board-list`
-  nested inside it — two separate scroll containers, both need it). Any new
-  scrollable list rebuilt on a timer needs this same snapshot/restore, same
-  as any new form field needs the model-sync/`oninput` fixes above.
+- Three scrollable lists — `live-draft.html`'s board modal `.board-list`
+  and `#player-list` (Available Players), plus `my-board.html`'s own
+  `.board-list` — reset to `scrollTop: 0` on every poll tick (3s in
+  `live-draft.html`, 5s in `my-board.html`), reading as "scrolling down snaps
+  back to the top after a few seconds." Replacing an element's `innerHTML`
+  always resets its scroll position, and scrolling isn't "interacting with a
+  form" so the `isInteractingWithForm()` guard above doesn't help here — it
+  only skips a render entirely, it doesn't make an *executed* render
+  scroll-safe. Fixed by snapshotting `scrollTop` right before the `innerHTML`
+  rebuild and restoring it right after, in `live-draft.html`'s `render()`
+  (for `#player-list`), its `renderBoardModalContent()` (for
+  `#board-modal-body` *and* the `.board-list` nested inside it — two separate
+  scroll containers, both need it), and `my-board.html`'s own `render()` (for
+  its `.board-list`). Any new scrollable list rebuilt on a timer needs this
+  same snapshot/restore, same as any new form field needs the
+  model-sync/`oninput` fixes above — this bug recurred a second time
+  specifically because `my-board.html` has its own independent poll loop
+  that the first round of fixes didn't touch.
 
 **Drafting a player requires confirming a native `confirm()` dialog** ("Draft
 {name}?") in `submitPick()` — covers both the main available-players list and

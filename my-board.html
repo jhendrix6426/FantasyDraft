@@ -330,8 +330,19 @@ function gmName(id) {
 function render() {
   const app = document.getElementById('app');
   if (!state.gmId) { app.innerHTML = renderLogin(); attachLoginHandlers(); return; }
+
+  // Same scroll-reset bug fixed in live-draft.html's board modal and player
+  // list: replacing #app's innerHTML on every 5s poll tick resets
+  // .board-list's scrollTop to 0, which reads as the board snapping back to
+  // the top while scrolling through it. Snapshot before, restore after.
+  const prevList = app.querySelector('.board-list');
+  const scrollTop = prevList ? prevList.scrollTop : 0;
+
   app.innerHTML = renderBoard();
   attachBoardHandlers();
+
+  const newList = app.querySelector('.board-list');
+  if (newList) newList.scrollTop = scrollTop;
 }
 
 function renderLogin() {
