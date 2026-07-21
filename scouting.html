@@ -360,8 +360,14 @@ tbody tr:hover { border-left: 2px solid var(--red); }
 </div>
 
 <script src="records.js"></script>
+<script src="fantasy-history.js"></script>
 <script>
 const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+// Bump each year once that year's draft is running in live-draft.html — the
+// one year whose fantasyDraft is sourced live from the fantasy-draft Worker
+// (and verified against official results once available) instead of
+// nationals-history's hardcoded historical data.
+const FANTASY_DRAFT_YEAR = 2026;
 let recordsBook = null;
 
 // ── GM draft board (shared with live-draft.html / my-board.html) ──────────
@@ -693,6 +699,8 @@ async function init() {
     const res = await fetch(NATS_URL, {signal: AbortSignal.timeout(15000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
     const db = await res.json();
+    await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
+    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     processNats(db);
     processFantasyDraft(db);
     processMatches(db);

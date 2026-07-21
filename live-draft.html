@@ -633,6 +633,16 @@ async function resetDraft() {
   draftOrderRows = null;
   await fetchLivedraft();
 }
+async function finalizeDraft() {
+  const errEl = document.getElementById('finalize-error');
+  const typed = prompt(`This permanently locks the roster for ${state.year} — undo, reset, and pool edits will no longer be possible, and there is no in-app way to reverse it. Type the year (${state.year}) to confirm.`);
+  if (typed !== String(state.year)) return;
+  try {
+    await commishFetch(`/fantasy/livedraft/${state.year}/finalize`, 'POST');
+    if (errEl) errEl.textContent = '';
+    await fetchLivedraft();
+  } catch (e) { if (errEl) errEl.textContent = e.message; }
+}
 
 function addToDraftOrder(gmId) {
   if (!draftOrderRows) draftOrderRows = [];
@@ -979,7 +989,7 @@ function renderCommishView() {
         <div class="btn-row">
           ${ld.status === 'active' ? '<button class="btn" id="pause-btn">Pause</button>' : ''}
           ${ld.status === 'paused' ? '<button class="btn" id="resume-btn">Resume</button>' : ''}
-          <button class="btn" id="undo-btn" ${!ld.picks.length ? 'disabled' : ''}>Undo Last Pick</button>
+          <button class="btn" id="undo-btn" ${!ld.picks.length || ld.finalized ? 'disabled' : ''}>Undo Last Pick</button>
           <a class="btn" href="draft-presentation.html?year=${state.year}" target="_blank">Open Presentation View</a>
         </div>
       </div>
@@ -987,10 +997,23 @@ function renderCommishView() {
         <div class="card-title">Pick Feed</div>
         <div class="feed">${renderFeed(ld.picks)}</div>
       </div>
+      ${ld.isComplete ? (ld.finalized ? `
+      <div class="card" style="border-color: var(--green)">
+        <div class="card-title" style="color: var(--green)">✓ Draft Finalized</div>
+        <div class="hint">The roster for ${state.year} is permanently locked — undo, reset, and pool edits are disabled. Scoring can now proceed on top of this locked roster.</div>
+      </div>
+      ` : `
+      <div class="card" style="border-color: var(--green)">
+        <div class="card-title" style="color: var(--green)">Finalize Draft</div>
+        <div class="hint" style="margin-bottom:10px">Permanently locks the roster for ${state.year} — undo, reset, and pool edits become unavailable. Do this once the draft is done and you're ready to move on to scoring. This cannot be undone in-app.</div>
+        <button class="btn" id="finalize-draft-btn" style="border-color: var(--green); color: var(--green)">Finalize Draft</button>
+        <div class="error-msg" id="finalize-error"></div>
+      </div>
+      `) : ''}
       <div class="card" style="border-color: var(--red-dim)">
         <div class="card-title" style="color: var(--red)">Danger Zone</div>
-        <div class="hint" style="margin-bottom:10px">Wipes draft order, roster size, player pool, and all picks back to pre-draft — for clearing a rehearsal run before the real event. GM roster/tokens and boards are untouched.</div>
-        <button class="btn" id="reset-draft-btn" style="border-color: var(--red); color: var(--red)">Reset Draft to Pre-Draft</button>
+        <div class="hint" style="margin-bottom:10px">${ld.finalized ? 'Draft is finalized — reset is disabled.' : 'Wipes draft order, roster size, player pool, and all picks back to pre-draft — for clearing a rehearsal run before the real event. GM roster/tokens and boards are untouched.'}</div>
+        <button class="btn" id="reset-draft-btn" style="border-color: var(--red); color: var(--red)" ${ld.finalized ? 'disabled' : ''}>Reset Draft to Pre-Draft</button>
       </div>
     `);
   }
@@ -1095,6 +1118,7 @@ function attachCommishHandlers() {
   const resume = document.getElementById('resume-btn'); if (resume) resume.onclick = resumeDraft;
   const undo = document.getElementById('undo-btn'); if (undo) undo.onclick = undoPick;
   const reset = document.getElementById('reset-draft-btn'); if (reset) reset.onclick = resetDraft;
+  const finalize = document.getElementById('finalize-draft-btn'); if (finalize) finalize.onclick = finalizeDraft;
 
   const startBtn = document.getElementById('start-draft-btn'); if (startBtn) startBtn.onclick = startDraft;
   const addOrder = document.getElementById('add-order-select');

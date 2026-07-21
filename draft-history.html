@@ -289,8 +289,14 @@ h1 {
 </div>
 
 <script src="records.js"></script>
+<script src="fantasy-history.js"></script>
 <script>
 const API = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+const FANTASY_API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+// Bump each year once that year's draft is running in live-draft.html — this
+// is the one year mergeWorkerDraftHistory/reconcileWithOfficialResults pull
+// from the fantasy-draft Worker instead of nationals-history's hardcoded data.
+const FANTASY_DRAFT_YEAR = 2026;
 let recordsBook = null;
 function badgeHtml(labels) {
   if (!labels.length) return '';
@@ -312,6 +318,16 @@ const state = { view: 'years', year: null, expanded: new Set() };
 function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null; }
 function r1(n) { return n!==null && n!==undefined ? Math.round(n*10)/10 : null; }
 function fmtTag(f) { return `<span class="fmt-tag fmt-${f}">${FMT_LABEL[f]||f}</span>`; }
+// A breakdown entry flagged verified:false disagrees with the official-results
+// recompute (see fantasy-history.js) — shown with a ⚠ and both values rather
+// than silently trusting either one, so the discrepancy stays visible until
+// resolved by hand.
+function breakdownEntryHtml(b) {
+  if (b.verified === false) {
+    return `<span style="color:var(--red)" title="Hand-entered: ${b.pts} · Official recompute: ${b.officialPts} — these disagree and need manual review">⚠ ${b.format}: ${b.pts}</span>`;
+  }
+  return `${b.format}: ${b.pts}`;
+}
 
 function normName(n) {
   return n.toLowerCase().trim().replace(/\s+/g,' ')
@@ -432,7 +448,7 @@ function openPlayerModal(name, year) {
   for (const team of d.teams) {
     const pick = team.players.find(pk => namesMatch(pk.name, name));
     if (!pick) continue;
-    draftHtml = `<div class="pm-record-line">Drafted <strong>#${pick.pick}</strong> overall by <strong>${team.gm}</strong>${d.champion === team.gm ? ' <span style="color:var(--gold-bright)">★ champion</span>' : ''} — scored <strong>${pick.pts}</strong> pts${pick.breakdown && pick.breakdown.length ? ` <span class="pool-avg">(${pick.breakdown.map(b => `${b.format}: ${b.pts}`).join(' · ')})</span>` : ''}</div>`;
+    draftHtml = `<div class="pm-record-line">Drafted <strong>#${pick.pick}</strong> overall by <strong>${team.gm}</strong>${d.champion === team.gm ? ' <span style="color:var(--gold-bright)">★ champion</span>' : ''} — scored <strong>${pick.pts}</strong> pts${pick.breakdown && pick.breakdown.length ? ` <span class="pool-avg">(${pick.breakdown.map(breakdownEntryHtml).join(' · ')})</span>` : ''}</div>`;
     break;
   }
   document.getElementById('pm-draft').innerHTML = draftHtml;
@@ -532,6 +548,8 @@ async function init() {
   setStatus('Loading...');
   try {
     const db = await fetch(API).then(r => r.json());
+    await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
+    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     RAW_DB = db;
     processFantasyDraft(db);
     recordsBook = RecordsBook.compute(db);
@@ -594,7 +612,7 @@ function renderDetail(year) {
           ${roster.map(p => `
             <div class="roster-player-row">
               <div><span class="pick-badge">Pick ${p.pick}</span><button class="player-link pname" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</button>${recordsBook ? badgeHtml(RecordsBook.badgesForPlayerYear(recordsBook, p.name, year)) : ''}
-                ${p.breakdown.length ? `<div class="player-breakdown">${p.breakdown.map(b => `${b.format}: ${b.pts}`).join(' · ')}</div>` : ''}
+                ${p.breakdown.length ? `<div class="player-breakdown">${p.breakdown.map(breakdownEntryHtml).join(' · ')}</div>` : ''}
               </div>
               <span class="ppts">${p.pts} pts</span>
             </div>`).join('')}

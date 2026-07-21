@@ -154,8 +154,12 @@ h1 {
 </div>
 
 <script src="records.js"></script>
+<script src="fantasy-history.js"></script>
 <script>
 const API = 'https://nationals-history.jhendrix6426.workers.dev/nationals/db';
+const FANTASY_API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
+// Bump each year once that year's draft is running in live-draft.html.
+const FANTASY_DRAFT_YEAR = 2026;
 let currentBook = null;
 let currentDb = null;
 
@@ -346,6 +350,8 @@ async function init() {
   setStatus('Loading...');
   try {
     const db = await fetch(API).then(r => r.json());
+    await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
+    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     currentDb = db;
     currentBook = RecordsBook.compute(db);
     const yearCount = Object.keys(currentBook.DD).length;

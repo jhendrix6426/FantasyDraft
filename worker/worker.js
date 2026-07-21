@@ -19,6 +19,11 @@ const DEFAULT_SCORING_CONFIG = {
 const VALID_DAYS = ['thu', 'fri', 'sat'];
 const VALID_RESULTS = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss'];
 
+// Short format code (as stored on players_<year> entries) -> verbose format
+// name (as used in scouting.html/records.js's FMT_MAP and in the
+// tournaments[].fantasyDraft breakdown[].format field on nationals-history).
+const FMT_CODE_TO_NAME = { T1: 'T1 2-Player', T2: 'T2 2-Player', BD: 'Booster Draft', SD: 'Sealed', Teams: 'Teams', TA: 'Type A' };
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -153,6 +158,84 @@ async function computeLivescoreState(env, year) {
   });
 
   return { year: Number(year), days, teams };
+}
+
+// Builds the same `tournaments[].fantasyDraft` shape records.js/draft-history.html/
+// scouting.html already expect from nationals-history's hardcoded historical
+// years, but derived live from this Worker's own data — roster + draftPick
+// from livedraft_<year>.picks, gm display name from gm_registry, and each
+// player's per-format point breakdown summed from livescore_<year> entries.
+// Only ever called for a finalized draft (see GET .../history below) — a
+// draft's roster/scores only become "history" once the commissioner has
+// locked them in.
+async function computeFantasyDraftHistory(env, year) {
+  const [livedraft, gmRegistry, livescore, players, config] = await Promise.all([
+    env.FANTASY_DB.get('livedraft_' + year, 'json'),
+    env.FANTASY_DB.get('gm_registry', 'json'),
+    env.FANTASY_DB.get('livescore_' + year, 'json'),
+    env.FANTASY_DB.get('players_' + year, 'json'),
+    env.FANTASY_DB.get('scoring_config', 'json'),
+  ]);
+  if (!livedraft || !livedraft.finalized) return null;
+
+  const gmName = {};
+  for (const g of (gmRegistry || [])) gmName[g.id] = g.name;
+
+  const days = livescore || defaultLivescore();
+  const playerInfo = {};
+  for (const p of (players || [])) playerInfo[p.name] = p;
+  const countPerDay = (config || DEFAULT_SCORING_CONFIG).countPerDay || DEFAULT_SCORING_CONFIG.countPerDay;
+
+  // Per-player, per-day point totals — same additive-within-a-day summing as
+  // computeLivescoreState (worker.js above), just kept at player granularity
+  // instead of collapsed straight into a team total.
+  const dayTotalsByPlayer = {};
+  for (const day of VALID_DAYS) {
+    const entries = (days[day] && days[day].entries) || [];
+    for (const e of entries) {
+      dayTotalsByPlayer[e.player] = dayTotalsByPlayer[e.player] || {};
+      dayTotalsByPlayer[e.player][day] = (dayTotalsByPlayer[e.player][day] || 0) + e.pts;
+    }
+  }
+
+  const rosterByGm = {};
+  for (const pick of (livedraft.picks || [])) {
+    (rosterByGm[pick.gm] = rosterByGm[pick.gm] || []).push(pick);
+  }
+
+  const teams = Object.entries(rosterByGm).map(([gmId, gmPicks]) => {
+    const rosterNames = gmPicks.map(p => p.player);
+
+    // Team pts uses the same top-countPerDay-of-roster-per-day rule as
+    // computeLivescoreState, so this matches what live-scoring already shows.
+    let seasonTotal = 0;
+    for (const day of VALID_DAYS) {
+      const scores = rosterNames
+        .map(name => (dayTotalsByPlayer[name] && dayTotalsByPlayer[name][day]) || 0)
+        .sort((a, b) => b - a);
+      seasonTotal += scores.slice(0, countPerDay).reduce((s, v) => s + v, 0);
+    }
+
+    const teamPlayers = gmPicks.map(pick => {
+      const name = pick.player;
+      const info = playerInfo[name] || {};
+      const breakdown = [];
+      let pts = 0;
+      for (const day of VALID_DAYS) {
+        const fmtCode = info[day];
+        if (!fmtCode) continue; // not registered to play this day
+        const dayPts = (dayTotalsByPlayer[name] && dayTotalsByPlayer[name][day]) || 0;
+        const verbose = FMT_CODE_TO_NAME[fmtCode];
+        if (verbose) breakdown.push({ format: verbose, pts: r1(dayPts) });
+        pts += dayPts;
+      }
+      return { name, pts: r1(pts), draftPick: pick.pickNumber, breakdown };
+    });
+
+    return { gm: gmName[gmId] || gmId, pts: r1(seasonTotal), players: teamPlayers };
+  });
+
+  return { year: Number(year), finalized: true, teams };
 }
 
 async function handleRequest(request, env) {
@@ -370,6 +453,8 @@ async function handleRequest(request, env) {
   if (path.startsWith('/fantasy/livedraft/') && method === 'PUT' && parts.length === 4) {
     if (!requireCommish(request, env)) return unauthorized();
     const year = parts[3];
+    const existing = await env.FANTASY_DB.get('livedraft_' + year, 'json');
+    if (existing && existing.finalized) return conflict('Draft is finalized and cannot be modified');
     const body = await request.json();
     body.updatedAt = Date.now();
     await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(body));
@@ -421,6 +506,7 @@ async function handleRequest(request, env) {
     const year = parts[3];
     const state = await env.FANTASY_DB.get('livedraft_' + year, 'json');
     if (!state) return notFound('No draft for ' + year);
+    if (state.finalized) return conflict('Draft is finalized and cannot be undone');
     if (!state.picks.length) return conflict('No picks to undo');
     state.picks.pop();
     if (state.status === 'complete') state.status = 'active';
@@ -437,9 +523,31 @@ async function handleRequest(request, env) {
   if (path.endsWith('/reset') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
     if (!requireCommish(request, env)) return unauthorized();
     const year = parts[3];
+    const existing = await env.FANTASY_DB.get('livedraft_' + year, 'json');
+    if (existing && existing.finalized) return conflict('Draft is finalized and cannot be reset');
     const state = defaultLivedraft(year);
     await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
     return json({ ok: true, ...state, ...computeTurn([], [], 0) });
+  }
+
+  // Permanent lock, taken once a draft is complete (before any scoring
+  // happens) — no /unfinalize exists on purpose. A real post-event mistake
+  // is fixed via a manual KV edit outside the app, deliberately, not an
+  // in-app undo. Also gates GET .../history below (see Part B): a draft's
+  // roster only surfaces as history once the commissioner has locked it in.
+  if (path.endsWith('/finalize') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
+    if (!requireCommish(request, env)) return unauthorized();
+    const year = parts[3];
+    const state = await env.FANTASY_DB.get('livedraft_' + year, 'json');
+    if (!state) return notFound('No draft for ' + year);
+    if (state.finalized) return conflict('Draft is already finalized');
+    const turn = computeTurn(state.draftOrder || [], state.picks || [], state.rosterSize || 0);
+    if (!turn.isComplete) return conflict('Draft is not complete');
+    state.finalized = true;
+    state.finalizedAt = Date.now();
+    state.updatedAt = Date.now();
+    await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
+    return json({ ok: true, ...state, ...computeTurn(state.draftOrder, state.picks, state.rosterSize) });
   }
 
   if (path.endsWith('/pick') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
@@ -455,6 +563,7 @@ async function handleRequest(request, env) {
 
     const state = await env.FANTASY_DB.get('livedraft_' + year, 'json');
     if (!state) return notFound('No draft for ' + year);
+    if (state.finalized) return conflict('Draft is finalized');
     if (state.status !== 'active') return conflict('Draft is not active (status: ' + state.status + ')');
 
     // Idempotent replay: a retried/double-submitted request for a pick that
@@ -480,6 +589,17 @@ async function handleRequest(request, env) {
     state.updatedAt = Date.now();
     await env.FANTASY_DB.put('livedraft_' + year, JSON.stringify(state));
     return json({ ok: true, pick, ...state, ...newTurn });
+  }
+
+  // Public, computed roster+score history for a finalized draft — the
+  // fantasyDraft-shaped payload draft-history.html/records.js/scouting.html
+  // consume, sourced live from this Worker instead of a manual transcription
+  // into the separate nationals-history API. 409s until /finalize has run.
+  if (path.endsWith('/history') && path.startsWith('/fantasy/livedraft/') && method === 'GET') {
+    const year = parts[3];
+    const history = await computeFantasyDraftHistory(env, year);
+    if (!history) return conflict('Draft is not finalized');
+    return json(history);
   }
 
   // ── GM draft boards ─────────────────────────────────────────

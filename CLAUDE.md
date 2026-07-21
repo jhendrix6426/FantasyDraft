@@ -342,6 +342,26 @@ draft on the real year with the real GM links, then reset cleanly right
 before the actual event without invalidating anyone's link or wiping the
 boards they built during the rehearsal.
 
+**Draft finalization**: `POST /fantasy/livedraft/:year/finalize` (commish
+auth) is a permanent, one-way lock on `livedraft_<year>` — sets
+`state.finalized = true` (409s if the draft isn't complete yet, or is
+already finalized). Wired to a "Finalize Draft" card in the commissioner
+view, shown once `ld.isComplete`, gated the same type-the-year way as Reset.
+Once finalized, `/undo`, `/reset`, and the raw `PUT /fantasy/livedraft/:year`
+all reject with 409 (`worker.js` — search `state.finalized`); `/pick` is
+already blocked once `status !== 'active'`, which finalizing doesn't change,
+but it double-checks the flag anyway for clarity. **There is deliberately no
+`/unfinalize`** — a genuine post-event correction is a manual KV edit via
+`wrangler`, outside the app on purpose, not an in-app undo. Sequencing:
+finalize happens once, right after the draft completes and before any
+scoring — it's unrelated to and doesn't touch the separate per-day
+`livescore_<year>` finalize/unfinalize in the Live Scoring system below.
+
+Finalizing is also the trust boundary for `GET /fantasy/livedraft/:year/history`
+(public) — see "Draft History Is Sourced From This Worker" further down —
+which 409s until `state.finalized` is true, so a draft's roster/scores only
+ever surface as history once the commissioner has explicitly locked them in.
+
 **Deploying worker changes**: `cd worker && wrangler deploy` (manual, no CI —
 matches how the rest of this project deploys).
 
@@ -489,6 +509,72 @@ drafting straight from a GM's board, added after a mock draft produced a
 misclick under the search bug above. Keep this even now that the search bug
 is fixed — it's cheap insurance against fat-fingering the wrong row during a
 live event.
+
+## Draft History Is Sourced From This Worker, Verified Against Official Results
+
+For years run through the Live Draft/Live Scoring systems above, the
+`tournaments[].fantasyDraft` data `draft-history.html`, `scouting.html`, and
+`records.html` render no longer has to be hand-transcribed into the separate
+`nationals-history` API after the fact (that was the old workflow, still
+true for the hardcoded 2024/2025 seasons that predate this).
+
+- `worker/worker.js`'s `computeFantasyDraftHistory(env, year)` (called by the
+  public `GET /fantasy/livedraft/:year/history`, 409 until the draft is
+  finalized — see "Draft finalization" above) joins `livedraft_<year>.picks`
+  (roster + `draftPick`), `gm_registry` (id → display name), and
+  `livescore_<year>` + `players_<year>` (per-player, per-format point
+  breakdown, plus the team `pts` total using the same top-`countPerDay`-of-roster
+  rule as `computeLivescoreState`) into exactly the shape
+  `records.js:51-55` already expects from a hardcoded year.
+- `fantasy-history.js` (new shared module, same `window.X` IIFE pattern as
+  `records.js`, loaded by all three consuming pages) has
+  `mergeWorkerDraftHistory(db, year, apiBase)` — fetches that endpoint and,
+  if it 200s, writes the result into `db.tournaments[]` for that year before
+  `RecordsBook.compute(db)`/`processFantasyDraft(db)` run. Fails soft (not
+  finalized yet, network error) — same fail-soft convention as every other
+  Worker call in `scouting.html`.
+- Each of the three pages defines its own `FANTASY_DRAFT_YEAR` constant near
+  the top (next to `FANTASY_API_BASE`/`NATS_URL`/`API`) — **bump this every
+  year** once that year's draft is live in `live-draft.html`. This is the one
+  year sourced from the Worker; every other year keeps coming from
+  `nationals-history` untouched.
+
+**Official-results verification**: `fantasy-history.js`'s
+`reconcileWithOfficialResults(db, year)` runs right after the merge above.
+Once `nationals-history` has that year's official match results loaded (a
+separate, later, manual step — see "Data source" up top), it recomputes each
+player's per-format point total straight from `db.matches` and compares it
+to the value already in `breakdown[]`. A match makes the official number
+canonical (`breakdown[].verified = true`); a real disagreement leaves the
+hand-entered value in place with `verified: false` + `officialPts`, which
+`draft-history.html`'s `breakdownEntryHtml()` renders as a ⚠ flag with both
+numbers rather than silently trusting either one. Validated against every
+real 2024/2025 `breakdown[]` entry (145/145 exact match) before shipping —
+the recompute:
+- infers Win/Timeout Win/Timeout Tie/Timeout Loss/Loss from score vs. each
+  format's target score (5 for T1/Teams/Type A/Booster Draft/Sealed, 7 for
+  T2) rather than an explicit field — a winner reaching target is a clean
+  Win/Loss, below target is a Timeout Win/Loss, no `winner` at all is a
+  Timeout Tie for both;
+- **excludes Top Cut matches** (`match.topCut === true`, null scores) —
+  Top Cut only happened in 2024 and was removed after that, so it's a
+  one-time historical fixture, not modeled in the ongoing engine (per John:
+  each bracket win was a flat 3 pts, plus +3 for the official 3rd-place game
+  winner, if that year's breakdown is ever spot-checked by hand);
+  Top-Cut/bonus `breakdown` lines are left untouched (`verified` stays
+  unset) rather than flagged, since this recompute can't evaluate them;
+- **dedupes Teams (doubles) format's duplicate match rows** — the same
+  physical game gets logged once per teammate as `playerA`, both rows
+  carrying an identical score, so rows sharing a `round` collapse to one;
+- **detects byes** (no match row at all — Redemption auto-awards a bye as a
+  full Win) by comparing a player's round count against the max round
+  number seen across the whole format+year, crediting one Win per gap.
+
+Team `pts` is left as whatever `mergeWorkerDraftHistory` computed (already
+correct via the top-N-per-day rule) — reconciliation only touches
+player-level `breakdown`/`pts`, on the view that a real disagreement is
+exactly what the ⚠ flag exists to surface for manual resolution, not
+something to silently rebalance into the team total.
 
 ## Working on this project
 
