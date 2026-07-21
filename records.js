@@ -25,7 +25,8 @@
       .replace(/\bmitch\b/,'mitchell')
       .replace(/jayden alstand/,'jayden alstad')
       .replace(/dario dante villanova/,'dario dante villanova')
-      .replace(/^dario villanova$/,'dario dante villanova');
+      .replace(/^dario villanova$/,'dario dante villanova')
+      .replace(/^jacob antonetz$/,'jake antonetz');
   }
   function namesMatch(a,b) {
     const na=normName(a), nb=normName(b);
