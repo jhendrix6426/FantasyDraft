@@ -368,6 +368,10 @@ const NATS_URL = 'https://nationals-history.jhendrix6426.workers.dev/nationals/d
 // (and verified against official results once available) instead of
 // nationals-history's hardcoded historical data.
 const FANTASY_DRAFT_YEAR = 2026;
+// ?player=Name deep-links straight into that player's modal (see init()) —
+// used by the "click a name" links on my-board.html and live-draft.html's
+// board panels to open a full profile from the draft board.
+const params = new URLSearchParams(location.search);
 let recordsBook = null;
 
 // ── GM draft board (shared with live-draft.html / my-board.html) ──────────
@@ -711,6 +715,15 @@ async function init() {
   }
   buildFantasyStats();
   renderTable();
+
+  const deepLinkPlayer = params.get('player');
+  if (deepLinkPlayer) {
+    if (PLAYERS.find(p => p.name === deepLinkPlayer)) {
+      openModal(deepLinkPlayer);
+    } else {
+      setStatus(document.getElementById('status').textContent + ` — ⚠ "${deepLinkPlayer}" isn't in this year's scouting list yet`);
+    }
+  }
 }
 
 function processNats(db) {

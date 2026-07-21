@@ -171,6 +171,23 @@ are color-coded pills (cyan/red/green/gold/purple/orange per format). Keep
 `index.html`'s tab bar styling in sync with `scouting.html` if the palette
 changes — they're meant to feel like one product.
 
+**Every page's `.page` container is `max-width: 1480px`**, matching
+`scouting.html` (chosen as the reference since its wide data table needs the
+room) — `draft-history.html`, `records.html`, `live-draft.html`,
+`live-scoring.html`, and `my-board.html` all match it now, so no page reads
+as narrower than another depending on which tab you're on. `my-account.html`
+is the one deliberate exception, staying at `560px` — it's just a 2-3 field
+password form, and stretching a form that small to full width looks worse,
+not more consistent. `draft-presentation.html`/`scoring-presentation.html`
+aren't part of this at all — they're full-bleed broadcast views by design
+(see above), no `.page` wrapper to match. Widening the page container
+doesn't mean form fields should stretch to it: `select`/`input[type=text
+|password|number]` are capped at `max-width: 480px` (textareas get their own
+wider `900px` cap, since the JSON pool editor benefits from the room) in
+every file whose `.page` grew — otherwise a lone Roster Size input or a
+login form's username field ends up absurdly wide. If you add another page
+to the site, match both numbers, not just the outer one.
+
 ## Live Draft system
 
 A real-time, multi-device live draft, separate from the read-only
@@ -291,7 +308,23 @@ included in the public `/fantasy/livedraft/:year` response (that's read by
 every GM and the broadcast view), only fetchable with that GM's own token, so
 one GM's strategy stays invisible to the others. When it's that GM's turn,
 board rows for still-available players get an inline Draft button, so the
-board doubles as a fast-pick tool, not just a reference list.
+board doubles as a fast-pick tool, not just a reference list. Every board
+row's name (`renderBoardRow()` here, and `my-board.html`'s own equivalent
+row markup) is a link to `scouting.html?player=<name>` opened in a new tab —
+`scouting.html`'s `init()` reads that `?player=` param and auto-opens the
+player's modal once data loads (`PLAYERS.find(...)`, falling back to an
+inline "not in this year's scouting list yet" status note rather than
+silently doing nothing if the name isn't an exact match — a real
+possibility now that the CSV pool-merge tool can add a player to
+`players_<year>` without `scouting.html`'s separately-maintained `PLAYERS`
+array being updated too). Scouting's modal, not `draft-history.html`'s, is
+the deliberate target here — draft-history's modal only has data once a
+year's draft is finalized (see "Draft History Is Sourced From This Worker"
+below), which is exactly when a GM is *not* using their board; scouting's
+modal works pre-draft since it's keyed off historical/registration data,
+not that year's fantasy results, and is already board-aware (the same
+Add/Remove toggle used elsewhere in it appears when a logged-in GM opens a
+player this way).
 
 On `live-draft.html` itself, the board renders in two places sharing one
 `renderBoardRow()` helper so they can't drift apart: an inline preview
