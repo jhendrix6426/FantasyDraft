@@ -126,12 +126,23 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 }
 .final-banner .msg { color: var(--green); font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
 
+.format-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .format-columns { grid-template-columns: 1fr; } }
+.format-col-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 8px; margin-bottom: 10px;
+}
+.format-col-title { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+.rounds-config { display: flex; align-items: center; gap: 6px; }
+.rounds-config input { width: 70px; max-width: 70px; padding: 6px 8px; font-size: 12px; }
+
 .player-list { max-height: 480px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; }
 .player-row { border-bottom: 1px solid var(--border-soft); }
 .player-row:last-child { border-bottom: none; }
 .player-row:nth-child(even) { background: rgba(255,255,255,0.012); }
-.player-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
-.player-name { font-weight: 600; cursor: pointer; }
+.player-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; cursor: pointer; }
+.player-name { font-weight: 600; }
+.flag-missing { color: var(--red); }
 .player-meta { color: var(--text-mute); font-size: 10px; }
 .player-pts { color: var(--gold-bright); font-weight: 700; margin-left: 8px; }
 .result-btns { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -147,14 +158,17 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); box-shadow
 .result-timeoutTie { border-color: rgba(218,179,94,0.4); }
 .result-timeoutLoss { border-color: rgba(255,140,60,0.4); }
 .result-loss { border-color: rgba(255,52,80,0.3); }
+.result-dnp { border-color: rgba(139,139,152,0.4); }
 
-.entry-history { padding: 0 14px 10px; display: none; }
-.entry-history.open { display: block; }
-.entry-row {
+.round-grid { padding: 0 14px 10px; display: none; }
+.round-grid.open { display: block; }
+.round-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 0; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid var(--border-soft);
+  padding: 6px 0; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid var(--border-soft);
 }
-.entry-row:last-child { border-bottom: none; }
+.round-row:last-child { border-bottom: none; }
+.round-num { flex-shrink: 0; width: 60px; font-family: 'Oswald', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-mute); }
+.round-result { display: flex; align-items: center; gap: 10px; }
 .entry-del { color: var(--red); cursor: pointer; font-size: 11px; }
 .entry-del:hover { color: #ff8a9b; }
 
@@ -202,9 +216,14 @@ if (window.self === window.top) {
 
 <script>
 const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
-const RESULT_LABELS = { win: 'Win', timeoutWin: 'TO Win', timeoutTie: 'TO Tie', timeoutLoss: 'TO Loss', loss: 'Loss' };
-const RESULT_ORDER = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss'];
+const RESULT_LABELS = { win: 'Win', timeoutWin: 'TO Win', timeoutTie: 'TO Tie', timeoutLoss: 'TO Loss', loss: 'Loss', dnp: 'DNP' };
+const RESULT_ORDER = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss', 'dnp'];
 const DAY_LABEL = { thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
+// Short format code -> display name, and which two formats run concurrently
+// each day (same pairing as FMT_CODE_TO_DAY in worker.js — kept as its own
+// copy per this project's existing per-file-constant convention).
+const FMT_CODE_TO_NAME = { BD: 'Booster Draft', T2: 'Type 2', T1: 'Type 1', TA: 'Type A', SD: 'Sealed', Teams: 'Teams' };
+const DAY_FORMATS = { thu: ['BD', 'T2'], fri: ['T1', 'TA'], sat: ['SD', 'Teams'] };
 
 const params = new URLSearchParams(location.search);
 const state = {
@@ -214,8 +233,8 @@ const state = {
   livescore: null,      // last fetched /fantasy/livescore/:year response
   gmsPublic: [],
   day: 'thu',
-  search: '',            // player search text, model-synced (see note on render())
-  openHistory: null,     // player name whose entry history is expanded, or null
+  searchByFormat: {},    // { BD: 'searchtext', T2: '...' } — one search box per format column
+  expandedPlayer: null,  // player name whose round grid is expanded, or null
   submitting: false,
   error: null,
   pollTimer: null,
@@ -321,11 +340,11 @@ function login() {
 }
 
 // ── Entry actions ────────────────────────────────────────────
-async function submitEntry(player, result) {
+async function submitEntry(player, round, result) {
   if (state.submitting) return;
   state.submitting = true; render();
   try {
-    await skFetch(`/fantasy/livescore/${state.year}/entry`, 'POST', { day: state.day, player, result });
+    await skFetch(`/fantasy/livescore/${state.year}/entry`, 'POST', { day: state.day, player, round, result });
     state.error = null;
   } catch (e) {
     if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) { state.submitting = false; return handleAuthFailure(); }
@@ -333,6 +352,42 @@ async function submitEntry(player, result) {
   }
   state.submitting = false;
   await fetchLivescore();
+}
+
+// A format's expected round count for the day — set live by the scorekeeper
+// once a format's field/pairings are known, editable any time before that
+// format's day is finalized (the Worker rejects it after).
+async function setRoundsForFormat(format) {
+  const input = document.getElementById(`rounds-${format}`);
+  const rounds = parseInt(input.value);
+  if (!rounds || rounds <= 0) { state.error = 'Enter a positive number of rounds.'; render(); return; }
+  try {
+    await skFetch(`/fantasy/livescore/${state.year}/rounds`, 'PUT', { format, rounds });
+    state.error = null;
+  } catch (e) {
+    if (e.message.includes('Unauthorized') || e.message.includes('HTTP 401')) return handleAuthFailure();
+    state.error = e.message;
+  }
+  await fetchLivescore();
+}
+
+// Mirrors computeMissingRoundsForDay in worker.js — the Worker is the
+// authoritative check (enforced server-side on finalize), this is purely so
+// the UI can flag incomplete players and disable Finalize before the
+// scorekeeper even tries, rather than failing only after a click.
+function computeMissingRoundsForDay(day, roster, entries, roundsByFormat) {
+  const out = [];
+  for (const p of roster) {
+    const format = p[day];
+    if (!format) continue;
+    const expected = roundsByFormat[format];
+    if (!expected) { out.push({ name: p.name, format, expected: null, missingRounds: [] }); continue; }
+    const myRounds = new Set(entries.filter(e => e.player === p.name).map(e => e.round));
+    const missingRounds = [];
+    for (let r = 1; r <= expected; r++) if (!myRounds.has(r)) missingRounds.push(r);
+    if (missingRounds.length) out.push({ name: p.name, format, expected, missingRounds });
+  }
+  return out;
 }
 
 async function deleteEntry(entryId) {
@@ -406,11 +461,6 @@ function renderLogin() {
       <button class="btn btn-primary" id="login-btn">Log In</button>
       <div class="error-msg" id="login-error"></div>
     </div>
-    <div class="card">
-      <div class="card-title">Just Watching?</div>
-      <div class="hint" style="margin-bottom:12px">No login needed to follow along — this opens the same clean broadcast display, without any scoring controls.</div>
-      <a class="btn" href="scoring-presentation.html?year=${state.year}" target="_blank">Open Live Display</a>
-    </div>
   `;
 }
 function attachLoginHandlers() {
@@ -452,13 +502,19 @@ function renderMain() {
       if (p[state.day]) allPlayers.push({ ...p, gm: team.gm });
     }
   }
+  const roundsByFormat = ls.roundsByFormat || {};
+  const missing = computeMissingRoundsForDay(state.day, allPlayers, dayData.entries, roundsByFormat);
 
   const entryContent = isFinal ? '' : `
     <div class="card">
       <div class="card-title">Enter Results — ${DAY_LABEL[state.day]}</div>
-      <div class="field"><input type="text" id="player-search" placeholder="Search players..." value="${state.search.replace(/"/g,'&quot;')}"></div>
-      <div class="player-list" id="player-list">${renderPlayerRows(allPlayers, dayData.entries)}</div>
-      <div class="btn-row"><button class="btn" id="finalize-btn">Finalize ${DAY_LABEL[state.day]}</button></div>
+      <div class="format-columns">
+        ${DAY_FORMATS[state.day].map(fmt => renderFormatColumn(fmt, allPlayers.filter(p => p[state.day] === fmt), dayData.entries, roundsByFormat)).join('')}
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="finalize-btn" ${missing.length ? 'disabled' : ''}>Finalize ${DAY_LABEL[state.day]}</button>
+      </div>
+      ${missing.length ? `<div class="hint" style="color:var(--red)">⚠ ${missing.length} player${missing.length > 1 ? 's' : ''} still incomplete — Finalize is disabled until every round is filled in: ${missing.map(m => m.name).join(', ')}</div>` : ''}
     </div>
   `;
 
@@ -491,56 +547,107 @@ function renderMain() {
   `;
 }
 
-function renderPlayerRows(players, dayEntries) {
-  const f = state.search.toLowerCase();
+// One column = one of the day's two concurrent formats, with its own
+// player search and its own live round-count setting.
+function renderFormatColumn(format, players, dayEntries, roundsByFormat) {
+  const expected = roundsByFormat[format] || null;
+  const search = state.searchByFormat[format] || '';
+  const f = search.toLowerCase();
   const filtered = f ? players.filter(p => p.name.toLowerCase().includes(f)) : players;
-  if (!filtered.length) return '<div class="hint" style="padding:14px">No players match.</div>';
 
-  return filtered.map(p => {
-    const entries = dayEntries.filter(e => e.player === p.name);
-    const total = entries.reduce((s, e) => s + e.pts, 0);
-    const isOpen = state.openHistory === p.name;
-    return `
-      <div class="player-row">
-        <div class="player-main">
-          <div>
-            <span class="player-name" data-toggle-history="${p.name.replace(/"/g,'&quot;')}">${p.name}</span>
-            ${entries.length ? `<span class="player-pts">${total} pts</span> <span class="player-meta">(${entries.length}x)</span>` : '<span class="player-meta">no entries yet</span>'}
-          </div>
-          <div class="result-btns">
-            ${RESULT_ORDER.map(r => `<button class="result-btn result-${r}" data-player="${p.name.replace(/"/g,'&quot;')}" data-result="${r}" ${state.submitting ? 'disabled' : ''}>${RESULT_LABELS[r]}</button>`).join('')}
-          </div>
-        </div>
-        <div class="entry-history ${isOpen ? 'open' : ''}">
-          ${entries.map(e => `
-            <div class="entry-row">
-              <span>${RESULT_LABELS[e.result]} — ${e.pts} pts</span>
-              <span class="entry-del" data-delete-entry="${e.id}">Remove</span>
-            </div>`).join('') || '<div class="hint">No entries yet.</div>'}
+  const rows = filtered.length
+    ? filtered.map(p => renderPlayerRoundRow(p, format, expected, dayEntries)).join('')
+    : '<div class="hint" style="padding:14px">No players match.</div>';
+
+  return `
+    <div class="format-col">
+      <div class="format-col-header">
+        <div class="format-col-title">${FMT_CODE_TO_NAME[format] || format} <span class="hint" style="margin:0">(${players.length})</span></div>
+        <div class="rounds-config">
+          <input type="number" min="1" id="rounds-${format}" placeholder="rounds" value="${expected || ''}">
+          <button class="btn btn-sm" data-set-rounds="${format}">Set</button>
         </div>
       </div>
-    `;
-  }).join('');
+      ${expected ? '' : `<div class="hint" style="color:var(--red); margin-bottom:8px">⚠ Round count not set yet — set it above before entering results.</div>`}
+      <div class="field"><input type="text" data-search-format="${format}" placeholder="Search ${FMT_CODE_TO_NAME[format] || format} players..." value="${search.replace(/"/g,'&quot;')}"></div>
+      <div class="player-list">${rows}</div>
+    </div>
+  `;
+}
+
+// A player's row collapses to a one-line summary (rounds filled / expected,
+// ⚠ if incomplete); clicking it expands a slot per round — filled slots show
+// the result with a Remove, empty slots show the result-choice buttons —
+// so a scorekeeper can see exactly which round is still blank, not just a
+// running total.
+function renderPlayerRoundRow(p, format, expected, dayEntries) {
+  const entries = dayEntries.filter(e => e.player === p.name);
+  const entryByRound = {};
+  for (const e of entries) entryByRound[e.round] = e;
+  const total = entries.reduce((s, e) => s + e.pts, 0);
+  const isOpen = state.expandedPlayer === p.name;
+
+  const filledCount = expected ? Math.min(entries.length, expected) : entries.length;
+  const isIncomplete = expected ? filledCount < expected : true;
+  const summary = expected ? `${filledCount}/${expected} rounds` : `${entries.length} entered · rounds not set`;
+
+  let roundGrid;
+  if (!expected) {
+    roundGrid = '<div class="hint" style="padding:8px 0">Set this format\'s round count above to start entering results round by round.</div>';
+  } else {
+    const rows = [];
+    for (let r = 1; r <= expected; r++) {
+      const e = entryByRound[r];
+      rows.push(`
+        <div class="round-row">
+          <span class="round-num">Round ${r}</span>
+          ${e
+            ? `<span class="round-result">${RESULT_LABELS[e.result]} — ${e.pts} pts <span class="entry-del" data-delete-entry="${e.id}">Remove</span></span>`
+            : `<div class="result-btns">${RESULT_ORDER.map(res => `<button class="result-btn result-${res}" data-player="${p.name.replace(/"/g,'&quot;')}" data-round="${r}" data-result="${res}" ${state.submitting ? 'disabled' : ''}>${RESULT_LABELS[res]}</button>`).join('')}</div>`
+          }
+        </div>
+      `);
+    }
+    roundGrid = rows.join('');
+  }
+
+  return `
+    <div class="player-row">
+      <div class="player-main" data-toggle-expand="${p.name.replace(/"/g,'&quot;')}">
+        <span class="player-name">${p.name}${isIncomplete ? ' <span class="flag-missing">⚠</span>' : ''}</span>
+        <span>
+          ${entries.length ? `<span class="player-pts">${total} pts</span>` : ''}
+          <span class="player-meta">${summary}</span>
+        </span>
+      </div>
+      <div class="round-grid ${isOpen ? 'open' : ''}">${roundGrid}</div>
+    </div>
+  `;
 }
 
 function attachMainHandlers() {
   document.querySelectorAll('[data-day]').forEach(el => {
-    el.onclick = () => { state.day = el.dataset.day; state.openHistory = null; render(); };
+    el.onclick = () => { state.day = el.dataset.day; state.expandedPlayer = null; render(); };
   });
 
-  const search = document.getElementById('player-search');
-  if (search) search.oninput = () => { state.search = search.value; render(); };
+  document.querySelectorAll('[data-search-format]').forEach(el => {
+    el.oninput = () => { state.searchByFormat[el.dataset.searchFormat] = el.value; render(); };
+  });
 
-  document.querySelectorAll('[data-toggle-history]').forEach(el => {
-    el.onclick = () => { state.openHistory = state.openHistory === el.dataset.toggleHistory ? null : el.dataset.toggleHistory; render(); };
+  document.querySelectorAll('[data-toggle-expand]').forEach(el => {
+    el.onclick = () => { state.expandedPlayer = state.expandedPlayer === el.dataset.toggleExpand ? null : el.dataset.toggleExpand; render(); };
   });
 
   document.querySelectorAll('.result-btn').forEach(btn => {
-    btn.onclick = () => submitEntry(btn.dataset.player, btn.dataset.result);
+    btn.onclick = () => submitEntry(btn.dataset.player, parseInt(btn.dataset.round), btn.dataset.result);
   });
 
   document.querySelectorAll('[data-delete-entry]').forEach(el => {
     el.onclick = () => deleteEntry(el.dataset.deleteEntry);
+  });
+
+  document.querySelectorAll('[data-set-rounds]').forEach(btn => {
+    btn.onclick = () => setRoundsForFormat(btn.dataset.setRounds);
   });
 
   const finalizeBtn = document.getElementById('finalize-btn');

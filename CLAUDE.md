@@ -188,18 +188,22 @@ are color-coded pills (cyan/red/green/gold/purple/orange per format). Keep
 `index.html`'s tab bar styling in sync with `scouting.html` if the palette
 changes — they're meant to feel like one product.
 
-**Every page's `.page` container is `max-width: 1480px`**, matching
+**Most pages' `.page` container is `max-width: 1480px`**, matching
 `scouting.html` (chosen as the reference since its wide data table needs the
-room) — `draft-history.html`, `records.html`, `live-draft.html`,
-`live-scoring.html`, and `my-board.html` all match it now, so no page reads
-as narrower than another depending on which tab you're on. `my-account.html`
-is the one deliberate exception, staying at `560px` — it's just a 2-3 field
-password form, and stretching a form that small to full width looks worse,
-not more consistent. `draft-presentation.html`/`scoring-presentation.html`
-aren't part of this at all — they're full-bleed broadcast views by design
-(see above), no `.page` wrapper to match. Widening the page container
-doesn't mean form fields should stretch to it: `select`/`input[type=text
-|password|number]` are capped at `max-width: 480px` (textareas get their own
+room) — `draft-history.html`, `records.html`, `live-draft.html`, and
+`live-scoring.html` match it, so those don't read as narrower than one
+another depending on which tab you're on. Two deliberate exceptions stay
+narrower: `my-account.html` at `560px` (just a 2-3 field password form —
+stretching it to full width looked worse, not more consistent), and
+`my-board.html`, reverted back to its original `720px` after widening it
+once — a single-column ranked list read as too spread out at 1480px, unlike
+the other pages' multi-card/grid layouts which actually used the extra
+room well. `draft-presentation.html`/`scoring-presentation.html` aren't part
+of this at all — they're full-bleed broadcast views by design (see above),
+no `.page` wrapper to match. Widening a page's container doesn't mean form
+fields inside it should stretch to it: on the four 1480px pages,
+`select`/`input[type=text|password|number]` are capped at `max-width: 480px`
+(textareas get their own
 wider `900px` cap, since the JSON pool editor benefits from the room) in
 every file whose `.page` grew — otherwise a lone Roster Size input or a
 login form's username field ends up absurdly wide. If you add another page
@@ -465,25 +469,55 @@ spreadsheet or the tournament host's own site, so a human (a "scorekeeper,"
 not necessarily the site owner) enters results into this tool as they
 happen, regardless of where the official record lives.
 
-`live-scoring.html`'s login screen has a "Just Watching?" option below the
-scorekeeper passphrase field that needs no login and just opens
-`scoring-presentation.html?year=...` in a new tab — for anyone (including the
-scorekeeper's own second monitor, or a TV for the room) who wants the clean
-read-only broadcast display without the entry UI. Mirrors the equivalent
-"Just Watching" link on `live-draft.html`'s landing screen.
+`live-scoring.html`'s login screen used to have a "Just Watching?" option
+below the scorekeeper passphrase field, mirroring the equivalent link on
+`live-draft.html`'s landing screen — removed once `index.html`'s top-level
+Live Scoring tab started pointing directly at `scoring-presentation.html`
+(see `index.html` above), since `live-scoring.html` itself is now only ever
+reached via Commissioner Tools → Scorekeeping, where a spectator option
+doesn't belong. Spectators use the top-level tab; this page is
+scorekeeper-only.
 
 **Scoring model** — `scoring_config` (`GET /fantasy/config`, previously dead
 scaffolding from the earlier scrapped project attempt, now live):
 ```js
-{ win: 3, timeoutWin: 2, timeoutTie: 1.5, timeoutLoss: 1, loss: 0, rosterSize: 9, countPerDay: 7, ... }
+{ win: 3, timeoutWin: 2, timeoutTie: 1.5, timeoutLoss: 1, loss: 0, dnp: 0, rosterSize: 9, countPerDay: 7, ... }
 ```
 A scorekeeper picks a player and a round result (Win/Timeout Win/Timeout
-Tie/Timeout Loss/Loss — Redemption auto-awards byes as a full Win, so there's
-no separate bye option); the point value is looked up server-side, never
-trusted from the client. Spot-checked against real 2025 historical data
-(`db.matches` + known `breakdown[].pts`) and confirmed to reproduce the
-exact known totals once true draws (`winner: null`) are correctly read as a
-Timeout Tie rather than a loss.
+Tie/Timeout Loss/Loss/Did Not Play — Redemption auto-awards byes as a full
+Win, so there's no separate bye option); the point value is looked up
+server-side, never trusted from the client. Spot-checked against real 2025
+historical data (`db.matches` + known `breakdown[].pts`) and confirmed to
+reproduce the exact known totals once true draws (`winner: null`) are
+correctly read as a Timeout Tie rather than a loss.
+
+**Entries are per-round, not just per-player** — each entry carries a
+`round` number (`POST .../entry` requires `{day, player, round, result}`),
+and the Worker rejects (409) a second entry for the same player+round —
+correcting a result means removing that entry and adding a new one, same
+create/delete-only pattern as everywhere else in this app, never an in-place
+update. `dnp` (Did Not Play, 0 pts by default, same as `loss`) is a distinct
+result from `loss`, specifically for a legitimate drop/no-show — it fills a
+round slot honestly (a real loss didn't happen) while still counting as
+"accounted for" by the round-completeness check below.
+
+**Expected round counts, and the hard-block on finalize**: `livescore_<year>`
+carries a `roundsByFormat` map (`{BD: 8, T2: 6, ...}`), set live by the
+scorekeeper per format (`PUT .../rounds`, body `{format, rounds}`, merges
+into the existing map rather than requiring all six every time) once that
+format's field/pairings are known — usually right before that round starts,
+same moment as entering scores, which is why this isn't commissioner-only
+config set in advance. `computeMissingRoundsForDay()` (duplicated in
+`worker.js` and `live-scoring.html`, same reason other small helpers are
+duplicated per-file in this project) compares each rostered, day-registered
+player's filled round numbers against `roundsByFormat[format]` — a format
+with no round count set yet also counts as incomplete (`expected: null`),
+since "unknown" can't be told apart from "missing" otherwise. `POST
+.../:day/finalize` is a **hard block**: it re-runs this check server-side
+(authoritative, not just a client-side disabled button) and 409s with the
+full list of incomplete players if anything's missing. There's deliberately
+no override/force-finalize path — the `dnp` result above is the intended
+escape hatch for a day that can't otherwise reach 100% completion.
 
 **Daily team total = sum of only the top `countPerDay` (7) of a team's 9
 rostered players that day** — the bottom 2 are dropped, recomputed fresh
@@ -509,19 +543,39 @@ discovered on the first real write, surfacing as a 401 that forces
 **KV schema** — `livescore_<year>`:
 ```js
 {
-  thu: { status: 'active'|'final', entries: [ {id, player, result, pts, ts} ], finalizedAt },
-  fri: { ... }, sat: { ... }
+  thu: { status: 'active'|'final', entries: [ {id, player, round, result, pts, ts} ], finalizedAt },
+  fri: { ... }, sat: { ... },
+  roundsByFormat: { BD: 8, T2: 6, T1: 10, TA: 6, SD: 8, Teams: 5 },
 }
 ```
 `GET /fantasy/livescore/:year` (public) joins this with `livedraft_<year>`
-and `players_<year>` and returns the full computed rollup (`teams[].dayTotals`,
-`seasonTotal`) — this is centralized server-side in `computeLivescoreState()`
-so `live-scoring.html` and `scoring-presentation.html` don't each reimplement
+and `players_<year>` and returns the full computed rollup
+(`teams[].dayTotals`, `seasonTotal`, plus `roundsByFormat` passed through) —
+this is centralized server-side in `computeLivescoreState()` so
+`live-scoring.html` and `scoring-presentation.html` don't each reimplement
 the top-7-of-9 math. `POST .../entry` (scorekeeper), `DELETE .../entry/:id`
 (scorekeeper — corrections matter more here than in the draft, since live
 scorekeeping under time pressure produces more mistakes than the slower,
-deliberate draft did), and `POST .../:day/finalize|unfinalize` (scorekeeper)
-round out the endpoints.
+deliberate draft did), `PUT .../rounds` (scorekeeper — see above), and
+`POST .../:day/finalize|unfinalize` (scorekeeper) round out the endpoints.
+`buildRosterList()` (joins `livedraft_<year>.picks` with `players_<year>`
+into one `{name, thu, fri, sat}` list per rostered player) is shared between
+`computeLivescoreState()` and the finalize hard-block, so there's one
+definition of "who's on a roster" for scoring purposes.
+
+**Entry screen is two columns, one per that day's concurrent format** — each
+day always runs exactly two formats side by side (`DAY_FORMATS` in
+`live-scoring.html`: Thu = Booster Draft/Type 2, Fri = Type 1/Type A, Sat =
+Sealed/Teams, same pairing as `FMT_CODE_TO_DAY` in `worker.js`), so
+`renderFormatColumn()` renders one column per format, each with its own
+player search (`state.searchByFormat`, keyed by format code) and its own
+inline round-count input/Set button. A player row collapses to one line
+(`X/Y rounds`, ⚠ if incomplete or the format's round count isn't set) and
+expands (`renderPlayerRoundRow()`, click anywhere on the row) into one row
+per expected round — filled rounds show the result + a Remove; an empty
+round shows the six result-choice buttons directly, no extra step. This
+replaced a single flat searchable list mixing both formats together with no
+round awareness at all.
 
 **`scoring-presentation.html`'s ticker** cross-references live entries
 against `records.js`'s all-time `formatHighScore` thresholds (grouping a

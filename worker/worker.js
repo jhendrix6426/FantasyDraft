@@ -10,6 +10,7 @@ const DEFAULT_SCORING_CONFIG = {
   timeoutTie: 1.5,
   timeoutLoss: 1,
   loss: 0,
+  dnp: 0,
   rosterSize: 9,
   countPerDay: 7,
   gradeWeights: { nationals: 0.5, rnrsCurrent: 0.3, rnrsHistory: 0.2 },
@@ -17,12 +18,22 @@ const DEFAULT_SCORING_CONFIG = {
 };
 
 const VALID_DAYS = ['thu', 'fri', 'sat'];
-const VALID_RESULTS = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss'];
+// 'dnp' (Did Not Play) is a real, distinct result — not just a synonym for
+// 'loss' — used to explicitly fill a round slot for a legitimate drop/no-show
+// so the round-completion check doesn't stay permanently blocked waiting for
+// a game that will never happen, without falsely recording a loss that never
+// occurred either. Worth 0 pts by default, same as loss, but kept separate
+// so match/round history stays honest.
+const VALID_RESULTS = ['win', 'timeoutWin', 'timeoutTie', 'timeoutLoss', 'loss', 'dnp'];
 
 // Short format code (as stored on players_<year> entries) -> verbose format
 // name (as used in scouting.html/records.js's FMT_MAP and in the
 // tournaments[].fantasyDraft breakdown[].format field on nationals-history).
 const FMT_CODE_TO_NAME = { T1: 'T1 2-Player', T2: 'T2 2-Player', BD: 'Booster Draft', SD: 'Sealed', Teams: 'Teams', TA: 'Type A' };
+// Which day each format is played — same pairing as FMT_TO_DAY in
+// scouting.html/records.js/draft-history.html (kept separate per this
+// project's existing per-file-constant convention, not shared).
+const FMT_CODE_TO_DAY = { BD: 'thu', T2: 'thu', T1: 'fri', TA: 'fri', SD: 'sat', Teams: 'sat' };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -110,7 +121,44 @@ function defaultLivescore() {
     thu: { status: 'active', entries: [] },
     fri: { status: 'active', entries: [] },
     sat: { status: 'active', entries: [] },
+    roundsByFormat: {}, // e.g. { BD: 8, T2: 6 } — set live by the scorekeeper, see .../rounds
   };
+}
+
+// Every rostered (drafted) player across all teams, joined with their
+// thu/fri/sat format registrations — shared by computeLivescoreState (below),
+// the live-scoring entry screen's player list, and the finalize round-
+// completeness check, so there's one definition of "who counts" for scoring.
+function buildRosterList(picks, playerList) {
+  const playerInfo = {};
+  for (const p of playerList) playerInfo[p.name] = p;
+  const names = [...new Set(picks.map(pk => pk.player))];
+  return names.map(name => ({
+    name,
+    thu: (playerInfo[name] && playerInfo[name].thu) || null,
+    fri: (playerInfo[name] && playerInfo[name].fri) || null,
+    sat: (playerInfo[name] && playerInfo[name].sat) || null,
+  }));
+}
+
+// For a given day, which rostered players registered to play that day are
+// missing a result for one or more of their format's expected rounds (or
+// whose format doesn't have a round count set yet at all, which blocks the
+// same way — see /finalize below). Used both there (authoritative) and by
+// live-scoring.html for live flagging as scores are entered.
+function computeMissingRoundsForDay(day, roster, entries, roundsByFormat) {
+  const out = [];
+  for (const p of roster) {
+    const format = p[day];
+    if (!format) continue; // not registered to play this day
+    const expected = roundsByFormat[format];
+    if (!expected) { out.push({ name: p.name, format, expected: null, missingRounds: [] }); continue; }
+    const myRounds = new Set(entries.filter(e => e.player === p.name).map(e => e.round));
+    const missingRounds = [];
+    for (let r = 1; r <= expected; r++) if (!myRounds.has(r)) missingRounds.push(r);
+    if (missingRounds.length) out.push({ name: p.name, format, expected, missingRounds });
+  }
+  return out;
 }
 
 // Rolls up raw per-round entries into team day/season totals: each team's
@@ -124,7 +172,9 @@ async function computeLivescoreState(env, year) {
     env.FANTASY_DB.get('players_' + year, 'json'),
     env.FANTASY_DB.get('scoring_config', 'json'),
   ]);
-  const days = livescore || defaultLivescore();
+  const raw = livescore || defaultLivescore();
+  const days = { thu: raw.thu || { status: 'active', entries: [] }, fri: raw.fri || { status: 'active', entries: [] }, sat: raw.sat || { status: 'active', entries: [] } };
+  const roundsByFormat = raw.roundsByFormat || {};
   const picks = (livedraft && livedraft.picks) || [];
   const playerList = players || [];
   const countPerDay = (config || DEFAULT_SCORING_CONFIG).countPerDay || DEFAULT_SCORING_CONFIG.countPerDay;
@@ -157,7 +207,7 @@ async function computeLivescoreState(env, year) {
     return { gm, roster, dayTotals, seasonTotal: r1(seasonTotal) };
   });
 
-  return { year: Number(year), days, teams };
+  return { year: Number(year), days, roundsByFormat, teams };
 }
 
 // Builds the same `tournaments[].fantasyDraft` shape records.js/draft-history.html/
@@ -647,10 +697,11 @@ async function handleRequest(request, env) {
     if (!requireScorekeeper(request, env)) return unauthorized();
     const year = parts[3];
     const body = await request.json();
-    const { day, player, result } = body;
+    const { day, player, round, result } = body;
     if (!VALID_DAYS.includes(day)) return badRequest('day must be one of: ' + VALID_DAYS.join(', '));
     if (!VALID_RESULTS.includes(result)) return badRequest('result must be one of: ' + VALID_RESULTS.join(', '));
     if (!player) return badRequest('player is required');
+    if (!Number.isInteger(round) || round <= 0) return badRequest('round must be a positive integer');
 
     const config = await env.FANTASY_DB.get('scoring_config', 'json') || DEFAULT_SCORING_CONFIG;
     const pts = config[result];
@@ -660,10 +711,36 @@ async function handleRequest(request, env) {
     if (!livescore[day]) livescore[day] = { status: 'active', entries: [] };
     if (livescore[day].status === 'final') return conflict('That day is already finalized — unfinalize it first to add more entries');
 
-    const entry = { id: crypto.randomUUID(), player, result, pts, ts: Date.now() };
+    // One entry per player+round — a round slot is filled or it isn't;
+    // correcting a result means removing this entry and adding a new one,
+    // same pattern as everywhere else in this app (never an in-place update).
+    const dup = livescore[day].entries.find(e => e.player === player && e.round === round);
+    if (dup) return conflict(`Round ${round} already has a result for ${player} — remove it first to change it`);
+
+    const entry = { id: crypto.randomUUID(), player, round, result, pts, ts: Date.now() };
     livescore[day].entries.push(entry);
     await env.FANTASY_DB.put('livescore_' + year, JSON.stringify(livescore));
     return json({ ok: true, entry, ...(await computeLivescoreState(env, year)) });
+  }
+
+  // Scorekeeper sets/updates one format's expected round count for the
+  // event, live — merges into roundsByFormat rather than requiring the
+  // whole map every time, so editing one format can't blank the others.
+  if (path.endsWith('/rounds') && path.startsWith('/fantasy/livescore/') && method === 'PUT') {
+    if (!requireScorekeeper(request, env)) return unauthorized();
+    const year = parts[3];
+    const body = await request.json();
+    const { format, rounds } = body;
+    if (!FMT_CODE_TO_NAME[format]) return badRequest('format must be one of: ' + Object.keys(FMT_CODE_TO_NAME).join(', '));
+    if (!Number.isInteger(rounds) || rounds <= 0) return badRequest('rounds must be a positive integer');
+
+    const livescore = await env.FANTASY_DB.get('livescore_' + year, 'json') || defaultLivescore();
+    const day = FMT_CODE_TO_DAY[format];
+    if (livescore[day] && livescore[day].status === 'final') return conflict('That day is already finalized — unfinalize it first to change round counts');
+    livescore.roundsByFormat = livescore.roundsByFormat || {};
+    livescore.roundsByFormat[format] = rounds;
+    await env.FANTASY_DB.put('livescore_' + year, JSON.stringify(livescore));
+    return json({ ok: true, ...(await computeLivescoreState(env, year)) });
   }
 
   if (path.startsWith('/fantasy/livescore/') && parts[4] === 'entry' && parts[5] && method === 'DELETE') {
@@ -694,6 +771,27 @@ async function handleRequest(request, env) {
     if (!livescore[day]) livescore[day] = { status: 'active', entries: [] };
     if (action === 'finalize') {
       if (livescore[day].status === 'final') return conflict('Day is already finalized');
+
+      // Hard block: every rostered player registered for this day needs
+      // every expected round of their format filled (a real result or an
+      // explicit 'dnp') before the day can lock in — including formats whose
+      // round count hasn't even been set yet, since "unknown" can't be
+      // distinguished from "missing" otherwise. This is authoritative here,
+      // not just a client-side check, since the API itself must enforce it.
+      const [livedraft, players] = await Promise.all([
+        env.FANTASY_DB.get('livedraft_' + year, 'json'),
+        env.FANTASY_DB.get('players_' + year, 'json'),
+      ]);
+      const roster = buildRosterList((livedraft && livedraft.picks) || [], players || []);
+      const missing = computeMissingRoundsForDay(day, roster, livescore[day].entries, livescore.roundsByFormat || {});
+      if (missing.length) {
+        const detail = missing.map(m => m.expected === null
+          ? `${m.name} (${m.format}: round count not set)`
+          : `${m.name} (${m.format}: round${m.missingRounds.length > 1 ? 's' : ''} ${m.missingRounds.join(', ')})`
+        ).join('; ');
+        return conflict(`Cannot finalize — ${missing.length} player(s) still incomplete: ${detail}`);
+      }
+
       livescore[day].status = 'final';
       livescore[day].finalizedAt = Date.now();
     } else {
