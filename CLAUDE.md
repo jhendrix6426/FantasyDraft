@@ -122,20 +122,37 @@ exact last-name match plus first-name match-or-prefix. If a player's stats
 seem to be missing, check whether their name needs a normalization rule added
 to `normName()`.
 
-## The PLAYERS list is manually maintained
+## The player pool is fetched from the Worker, not hardcoded
 
-The `PLAYERS` array in `scouting.html` (2026 Nationals attendees + their
-Thu/Fri/Sat format registrations) is hardcoded, not fetched. There's a
-registration system at a separate site, but it's behind an auth wall the
-scraper can't get through. The user pulls fresh registration data manually
-and pastes updated entries into the array as the field fills in. Each entry:
+`PLAYERS` in `scouting.html` (this year's Nationals attendees + their
+Thu/Fri/Sat format registrations) used to be a hardcoded array, manually
+kept in sync by hand with `players_<year>` in the `fantasy-draft` Worker (the
+same data live-draft.html's Player Pool panel edits) — two copies of the same
+list, updated separately. That's gone: `loadPlayerPool()` in `scouting.html`'s
+`init()` now fetches `GET /fantasy/players/<FANTASY_DRAFT_YEAR>` directly (same
+call live-draft.html/my-board.html already made), so there's exactly one
+source of truth. Uploading a new registrations CSV via live-draft.html's
+Player Pool panel (see "Player pool" under Live Draft system below) now shows
+up in `scouting.html` on next load with no separate step. If that fetch
+fails (Worker unreachable — rare, but see below), `PLAYERS` is left `[]` and
+`setStatus()` shows a distinct ⚠ message rather than silently rendering an
+empty table with no explanation; this doesn't fall back to a stale hardcoded
+copy on purpose, since that would just reintroduce the exact drift this
+change removed. Each pool entry:
 
 ```js
 {name:'Player Name', thu:'BD', fri:'T1', sat:'Teams', days:3, firstNats:false}
 ```
 
 `thu`/`fri`/`sat` are format codes or `null` if not playing that day; `days`
-is the count of non-null days.
+is the count of non-null days. This is a live network dependency scouting.html
+didn't strictly have before (previously only used for the GM board/session
+triangle, see "Live Draft system" below) — accepted deliberately, since
+`live-draft.html`/`live-scoring.html`/`draft-history.html` already fully
+depend on the same Worker being up, and a real Cloudflare Workers outage is
+rare enough (~99.99%+ published uptime) not to be worth designing around; a
+bad `worker.js` deploy is the more realistic failure mode, and that's on us
+to test before shipping, same as always.
 
 ## Fantasy draft history is live, not hardcoded
 
@@ -290,12 +307,18 @@ this is handled pragmatically rather than with Durable Objects — idempotent
 and `draft-presentation.html` poll every 2-3s, so a bad pick would surface
 almost immediately.
 
-**Player pool**: the commissioner pastes a JSON array (matching `scouting.html`'s
-`PLAYERS` shape) into `live-draft.html`'s Player Pool panel, which `PUT`s it to
-`/fantasy/players/:year`. There's no automatic sync from `scouting.html`'s
-hardcoded `PLAYERS` array — copy/paste it manually before a draft.
-`GET /fantasy/players/:year` is public (no auth), which is what lets a GM's
-own draft board (below) work before the draft has even started.
+**Player pool**: `live-draft.html`'s Player Pool panel updates
+`players_<year>` (`PUT /fantasy/players/:year`), primarily via uploading a
+registrations CSV export — see `handlePoolFileUpload()`/`diffPlayerPool()`
+in `live-draft.html`, which diffs the upload against the currently saved
+pool and only adds/updates what actually changed, never silently dropping
+an existing player (a raw full-JSON-paste box still exists under "Advanced"
+for deliberate edits/removals). `GET /fantasy/players/:year` is public (no
+auth), which is what lets a GM's own draft board (below) work before the
+draft has even started — and, since `scouting.html` fetches this same
+endpoint (see "The player pool is fetched from the Worker, not hardcoded"
+above), it's also what keeps the scouting list in sync automatically now,
+with no separate step.
 
 **GM draft boards**: each GM can pre-rank a private wishlist of players from
 their own `live-draft.html?gm=...&token=...` link, usable both before the

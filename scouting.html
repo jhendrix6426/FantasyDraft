@@ -548,71 +548,12 @@ const FMT_LABEL = {T1:'Type 1',T2:'Type 2',BD:'Booster',SD:'Sealed',Teams:'Teams
 const FMT_TO_DAY = {BD:'thu',T2:'thu',T1:'fri',TA:'fri',SD:'sat',Teams:'sat'};
 const DAY_LABEL = {thu:'Thu',fri:'Fri',sat:'Sat'};
 
-const PLAYERS = [
-  {name:'Jonathan Greeson',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Josue Martinez',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Brayden Babij',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Derek Tirado',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Keegan Hendrix',thu:'BD',fri:null,sat:'Teams',days:2,firstNats:false},
-  {name:'Aiden Reisenbigler',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Chad Frantz',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Phillip Anderson',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Samuel Austin',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Roy Harbold',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Rylan Harbold',thu:null,fri:'TA',sat:'SD',days:2,firstNats:true},
-  {name:'Brandon Wade',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Brandon Swango',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Kye Murphy',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Shon Seivers',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Talon Rhoades',thu:'BD',fri:'TA',sat:'SD',days:3,firstNats:true},
-  {name:'Maylee Rhoades',thu:'BD',fri:'TA',sat:'SD',days:3,firstNats:true},
-  {name:'Sean Rhoades',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:true},
-  {name:'Kayleb Matthews',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Luke Hull',thu:null,fri:'T1',sat:'Teams',days:2,firstNats:true},
-  {name:'Andy Fish',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Joseph Roberts',thu:'T2',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jonathan Steckmann',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Mitchell Stewart',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Mark Underwood',thu:null,fri:'T1',sat:'Teams',days:2,firstNats:false},
-  {name:'Joshua Potratz',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jeremy Chambers',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Jacob Arrowood',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jonathan Gomez',thu:'T2',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Dario Dante Villanova',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'John Michaliszyn',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Elijah Andrighetti',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Tyler Stevens',thu:'T2',fri:null,sat:null,days:1,firstNats:false},
-  {name:'Xavier Maddux',thu:'BD',fri:'TA',sat:'Teams',days:3,firstNats:true},
-  {name:'Timothy Maddux',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Kyle Hostutler',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Eli Mulye',thu:'T2',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Rob Mulye',thu:null,fri:null,sat:'SD',days:1,firstNats:false},
-  {name:'Dylan Thomas',thu:null,fri:'T1',sat:null,days:1,firstNats:true},
-  {name:'Elias Spiller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jason Ricci',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Charles Loria',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Benjamin Hull',thu:'BD',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Kurt Hake',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Raymond Celotto',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Robin Dermo',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Nic Marshall',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Maxwell Graf',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:true},
-  {name:'Luke Marshall',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'James Courtney',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Marc Vellake',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Emmanuel Echavarria',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Justin Alstad',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Royce Russell',thu:null,fri:'T1',sat:null,days:1,firstNats:true},
-  {name:'Joe Andrighetti',thu:'BD',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Luke Anderson',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Stephen Brooks',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false},
-  {name:'Tim Estes',thu:'T2',fri:'T1',sat:null,days:2,firstNats:false},
-  {name:'Stephen Coates',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jay Chambers',thu:null,fri:'T1',sat:null,days:1,firstNats:false},
-  {name:'Liam Coller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jamie Coller',thu:'BD',fri:'T1',sat:'SD',days:3,firstNats:false},
-  {name:'Jayden Alstad',thu:'T2',fri:'T1',sat:'Teams',days:3,firstNats:false}
-];
+// Fetched from the fantasy-draft Worker's players_<year> pool (see loadPlayerPool()
+// in init()) instead of hardcoded here — this used to be a separate, manually
+// maintained copy of the same data live-draft.html's Player Pool panel edits,
+// which is exactly the drift the CSV pool-merge tool (see CLAUDE.md) exposed:
+// updating the Worker's pool had no effect here until this file was fetched instead.
+let PLAYERS = [];
 
 // Fantasy draft history — populated live from the Nationals API (tournaments[].fantasyDraft)
 let DD = {};
@@ -695,9 +636,21 @@ function buildFantasyStats() {
   }
 }
 
+async function loadPlayerPool() {
+  const res = await fetch(`${FANTASY_API_BASE}/fantasy/players/${FANTASY_DRAFT_YEAR}`, {signal: AbortSignal.timeout(15000)});
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error('Unexpected response shape');
+  return data;
+}
+
 async function init() {
   loadGmBoardSession(); // fire-and-forget; board control just won't show until this resolves
   loadGmsPublic(); // fire-and-forget; only needed for "taken by X" in board view
+
+  let poolError = null;
+  try { PLAYERS = await loadPlayerPool(); }
+  catch (e) { poolError = e.message; PLAYERS = []; }
 
   try {
     const res = await fetch(NATS_URL, {signal: AbortSignal.timeout(15000)});
@@ -709,9 +662,13 @@ async function init() {
     processFantasyDraft(db);
     processMatches(db);
     recordsBook = RecordsBook.compute(db);
-    setStatus(`Loaded. ${PLAYERS.length} players · ${Object.keys(playerNatsData).length} with Nats history (2022–present).`);
+    setStatus(poolError
+      ? `⚠ Could not load the ${FANTASY_DRAFT_YEAR} player pool from the Worker (${poolError}) — Nats history loaded, but the player list is empty. Try reloading.`
+      : `Loaded. ${PLAYERS.length} players · ${Object.keys(playerNatsData).length} with Nats history (2022–present).`);
   } catch(e) {
-    setStatus(`Could not load Nats data: ${e.message}. Showing players without history.`);
+    setStatus(poolError
+      ? `⚠ Could not load the player pool (${poolError}) or Nats history (${e.message}). Try reloading.`
+      : `Could not load Nats data: ${e.message}. Showing players without history.`);
   }
   buildFantasyStats();
   renderTable();
