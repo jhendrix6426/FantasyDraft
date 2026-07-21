@@ -593,6 +593,138 @@ async function copyGmPassword(idx, btn) {
   setTimeout(() => { btn.textContent = original; }, 1500);
 }
 
+// ── Player pool: merge from a registration export ──────────────
+// The registration site's CSV export is the full current registrant list
+// each time it's pulled, not a delta — so "update the pool" almost always
+// means "add whoever's new since last time," not a wholesale replace. This
+// diffs the upload against whatever's currently saved for the year and only
+// touches names that are actually new or actually changed; anyone already
+// in the pool but absent from this file is left alone, never removed, so a
+// GM's board (which references pool players by name) can't be pulled out
+// from under them by an incomplete or out-of-date export.
+const REG_EVENT_TO_FMT = {
+  'Booster Draft': 'BD', 'Type1 2player': 'T1', 'Type2 2player': 'T2',
+  'TypeA 2player': 'TA', 'Sealed Deck': 'SD', 'Teams': 'Teams',
+  'None': null, '': null,
+};
+
+// Minimal RFC4180-ish CSV parser (quoted fields, embedded commas/newlines,
+// doubled-quote escaping) — the registration export has commas inside
+// quoted fields (e.g. the Registered timestamp), so a naive split(',') would
+// misalign every column after the first one.
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '');
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\r') { /* skip; \n below ends the row */ }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const header = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(v => v.trim() !== ''))
+    .map(r => { const o = {}; header.forEach((h, i) => o[h] = (r[i] || '').trim()); return o; });
+}
+
+function csvRowsToPlayers(rows) {
+  const warnings = [];
+  const mapEvent = (val, col, who) => {
+    if (val in REG_EVENT_TO_FMT) return REG_EVENT_TO_FMT[val];
+    warnings.push(`${who}: unrecognized "${col}" value "${val}" — treated as not playing that day`);
+    return null;
+  };
+  const players = [];
+  for (const r of rows) {
+    if ((r['Fantasy Draft'] || '') !== 'Yes') continue; // registration opt-in, not everyone at Nats plays fantasy
+    const name = `${r['First Name'] || ''} ${r['Last Name'] || ''}`.replace(/\s+/g, ' ').trim();
+    if (!name) continue;
+    const thu = mapEvent(r['Thursday Event'], 'Thursday Event', name);
+    const fri = mapEvent(r['Friday Event'], 'Friday Event', name);
+    const sat = mapEvent(r['Saturday Event'], 'Saturday Event', name);
+    players.push({
+      name, thu, fri, sat,
+      days: [thu, fri, sat].filter(Boolean).length,
+      firstNats: (r['First Nationals'] || '') === 'Yes',
+    });
+  }
+  return { players, warnings };
+}
+
+// Upserts by exact name (matches how the Worker/picks already key players —
+// no fuzzy nickname matching here, unlike records.js's cross-year stat
+// matching, since within one year's registration export a player's name is
+// consistent). Only fields that actually differ trigger an update; anyone
+// in `current` but missing from `incoming` is left untouched and reported.
+function diffPlayerPool(current, incoming) {
+  const merged = current.map(p => ({ ...p }));
+  const byName = new Map(merged.map(p => [p.name, p]));
+  const FIELDS = ['thu', 'fri', 'sat', 'days', 'firstNats'];
+  const added = [], updated = [];
+  for (const inc of incoming) {
+    const existing = byName.get(inc.name);
+    if (!existing) {
+      const fresh = { ...inc };
+      merged.push(fresh);
+      byName.set(inc.name, fresh);
+      added.push(inc.name);
+    } else {
+      const changes = FIELDS.filter(f => existing[f] !== inc[f])
+        .map(f => `${f}: ${JSON.stringify(existing[f])} → ${JSON.stringify(inc[f])}`);
+      if (changes.length) { Object.assign(existing, inc); updated.push({ name: inc.name, changes }); }
+    }
+  }
+  const incomingNames = new Set(incoming.map(p => p.name));
+  const missing = current.filter(p => !incomingNames.has(p.name)).map(p => p.name);
+  return { merged, added, updated, missing };
+}
+
+let pendingPoolMerge = null;
+
+async function handlePoolFileUpload(event) {
+  const file = event.target.files[0];
+  const errEl = document.getElementById('pool-error');
+  if (!file) return;
+  const year = document.getElementById('pool-year').value.trim() || state.year;
+  try {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    const { players, warnings } = csvRowsToPlayers(rows);
+    const current = await publicGet(`/fantasy/players/${year}`);
+    const diff = diffPlayerPool(Array.isArray(current) ? current : [], players);
+    pendingPoolMerge = { year, warnings, ...diff };
+    if (errEl) errEl.textContent = '';
+  } catch (e) {
+    pendingPoolMerge = null;
+    if (errEl) errEl.textContent = 'Could not read that file: ' + e.message;
+  }
+  render();
+}
+
+async function mergeAndSavePlayerPool() {
+  if (!pendingPoolMerge) return;
+  const errEl = document.getElementById('pool-merge-error');
+  try {
+    await commishFetch(`/fantasy/players/${pendingPoolMerge.year}`, 'PUT', pendingPoolMerge.merged);
+    const count = pendingPoolMerge.merged.length;
+    pendingPoolMerge = null;
+    const fileInput = document.getElementById('pool-csv-file');
+    if (fileInput) fileInput.value = '';
+    document.getElementById('pool-error').textContent = `Saved ${count} players.`;
+    render();
+  } catch (e) {
+    if (errEl) errEl.textContent = e.message;
+  }
+}
+
 async function savePlayerPool() {
   const errEl = document.getElementById('pool-error');
   const year = document.getElementById('pool-year').value.trim() || state.year;
@@ -1099,15 +1231,45 @@ function renderGmRegistryPanel() {
   `;
 }
 
+function renderPoolMergePreview() {
+  if (!pendingPoolMerge) return '';
+  const m = pendingPoolMerge;
+  const parts = [];
+  if (m.warnings.length) {
+    parts.push(`<div class="hint" style="color:var(--red)">${m.warnings.map(w => '⚠ ' + w).join('<br>')}</div>`);
+  }
+  parts.push(`<div class="hint">${m.added.length} new · ${m.updated.length} updated · ${m.missing.length} in the saved pool but not in this file (left untouched)</div>`);
+  if (m.added.length) parts.push(`<div class="hint" style="color:var(--green)"><strong>Adding:</strong> ${m.added.join(', ')}</div>`);
+  if (m.updated.length) parts.push(`<div class="hint" style="color:var(--gold-bright)"><strong>Updating:</strong> ${m.updated.map(u => `${u.name} (${u.changes.join('; ')})`).join(' · ')}</div>`);
+  if (m.missing.length) parts.push(`<div class="hint"><strong>Not in this file:</strong> ${m.missing.join(', ')}</div>`);
+  const nothingToDo = !m.added.length && !m.updated.length;
+  return `
+    <div class="card" style="border-color: var(--gold); margin-top:10px">
+      ${parts.join('')}
+      <button class="btn" id="confirm-merge-btn" ${nothingToDo ? 'disabled' : ''} style="margin-top:10px">${nothingToDo ? 'Nothing to save — already up to date' : `Save Merged Pool (${m.merged.length} total)`}</button>
+      <div class="hint" id="pool-merge-error"></div>
+    </div>
+  `;
+}
+
 function renderPlayerPoolPanel() {
   return `
     <div class="card">
       <div class="card-title">Player Pool</div>
       <div class="field"><label>Year</label><input type="text" id="pool-year" value="${state.year}"></div>
-      <div class="field"><label>Players (JSON array, e.g. from scouting.html's PLAYERS list)</label>
-        <textarea id="pool-json" placeholder='[{"name":"Player Name","thu":"BD","fri":"T1","sat":"Teams"}]'></textarea>
+      <div class="field">
+        <label>Add / Update From Registration Export (CSV)</label>
+        <input type="file" id="pool-csv-file" accept=".csv">
+        <div class="hint">Upload the latest registrations export for the year above. This only adds new registrants and updates players whose day/format registration actually changed — anyone already in the saved pool but missing from this file is left alone, so it's safe to run any time without touching a GM's existing board.</div>
       </div>
-      <button class="btn" id="save-pool-btn">Save Player Pool</button>
+      <div id="pool-merge-preview">${renderPoolMergePreview()}</div>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer; color:var(--text-dim); font-size:11px; text-transform:uppercase; letter-spacing:1px">Advanced: raw full replace</summary>
+        <div class="field" style="margin-top:10px"><label>Players (JSON array) — ⚠ overwrites the entire pool, including anyone not listed here</label>
+          <textarea id="pool-json" placeholder='[{"name":"Player Name","thu":"BD","fri":"T1","sat":"Teams"}]'></textarea>
+        </div>
+        <button class="btn" id="save-pool-btn">Save Player Pool (Full Replace)</button>
+      </details>
       <div class="hint" id="pool-error"></div>
     </div>
   `;
@@ -1119,6 +1281,8 @@ function attachCommishHandlers() {
   const undo = document.getElementById('undo-btn'); if (undo) undo.onclick = undoPick;
   const reset = document.getElementById('reset-draft-btn'); if (reset) reset.onclick = resetDraft;
   const finalize = document.getElementById('finalize-draft-btn'); if (finalize) finalize.onclick = finalizeDraft;
+  const poolFile = document.getElementById('pool-csv-file'); if (poolFile) poolFile.onchange = handlePoolFileUpload;
+  const confirmMerge = document.getElementById('confirm-merge-btn'); if (confirmMerge) confirmMerge.onclick = mergeAndSavePlayerPool;
 
   const startBtn = document.getElementById('start-draft-btn'); if (startBtn) startBtn.onclick = startDraft;
   const addOrder = document.getElementById('add-order-select');
