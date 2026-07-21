@@ -13,30 +13,50 @@ Repo: https://github.com/jhendrix6426/FantasyDraft — pushing to `main` auto-de
 
 ## Structure
 
-- `index.html` — landing page: header banner + tab bar (GM Tools, Live Draft,
-  Live Scoring, Draft History, Records). "GM Tools" is a `.tab-group` — click
-  opens a `.tab-dropdown` with three sub-tabs (Scouting, My Draft Board, My
-  Account) rather than loading a page directly; the toggle button gets `.active` whenever
-  either sub-tab's page is loaded, same visual treatment as a normal tab. The
-  other four are plain buttons. Tab-switching JS lives inline at the bottom of
-  the file — clicking any `[data-tab]` button swaps `#tab-frame`'s `src` to
-  `data-tab + '.html'`. Adding another plain top-level tab is just a new
-  button with a matching `data-tab` and HTML file; adding another GM Tools
-  sub-tab is a new button inside `#gm-tools-dropdown` plus adding its
-  `data-tab` value to `gmToolsTabNames`. The dropdown closes on an outside
-  click *or* on a click into `#tab-frame` — the latter needs its own handling
-  (`window`'s `blur` event) since a click inside an iframe never bubbles to
-  the parent document, so a plain document-level click listener alone can't
-  catch it. This header only wraps a page when it's
-  reached *through* the tab bar (i.e. loaded inside `#tab-frame`) — GMs reach
-  `live-draft.html`/`my-board.html` via a direct shareable link instead, which
-  bypasses `index.html` entirely. Those pages (plus `live-scoring.html`, which
-  can also be opened directly) detect this with `window.self === window.top`
-  and render their own small `.site-nav` back-link row when true, so a GM
-  arriving cold via their link isn't stranded with no way to reach the rest
-  of the site. Don't add this to `draft-presentation.html`/
-  `scoring-presentation.html` — those are deliberately chrome-free full-bleed
-  broadcast views, always opened directly, never wrapped by `index.html`.
+- `index.html` — landing page: header banner + tab bar (GM Tools, Commissioner
+  Tools, Live Draft, Live Scoring, Draft History, Records). "GM Tools" and
+  "Commissioner Tools" are `.tab-group`s — click opens a `.tab-dropdown`
+  (GM Tools: Scouting, My Draft Board, My Account, Join Live Draft;
+  Commissioner Tools: Live Draft Setup, Scorekeeping) rather than loading a
+  page directly; each toggle button gets `.active` whenever any of its own
+  sub-tabs is loaded, same visual treatment as a normal tab. The remaining
+  four (Live Draft, Live Scoring, Draft History, Records) are plain buttons.
+  Tab-switching JS lives inline at the bottom of the file — clicking any
+  `[data-tab]` button swaps `#tab-frame`'s `src` to `data-src` if the button
+  has one, else `data-tab + '.html'`. `data-src` exists for buttons that
+  don't map 1:1 onto `<data-tab>.html`: **Live Draft**/**Live Scoring** (top
+  level) point at `draft-presentation.html?year=…`/`scoring-presentation.html?year=…`
+  — the read-only broadcast views, which already render their own "waiting"
+  placeholder when nothing's live yet, so no separate not-available handling
+  was needed here — while **Join Live Draft** (GM Tools) and **Live Draft
+  Setup** (Commissioner Tools) both point at `live-draft.html` with
+  `?mode=gm` / `?mode=commish` to skip straight past its landing role-picker
+  into the right login form (see `landingMode` in `live-draft.html`, below).
+  **Scorekeeping** just points at plain `live-scoring.html`, since its
+  landing view is already the scorekeeper login with no picker to skip.
+  Bump the two hardcoded `year=` values here every season alongside
+  `FANTASY_DRAFT_YEAR` in `draft-history.html`/`scouting.html`/`records.html`.
+  Adding another plain top-level tab is a new button with a matching
+  `data-tab` (+ `data-src` if it needs one); adding another dropdown sub-tab
+  is a new button inside the relevant `#…-dropdown` plus adding its
+  `data-tab` value to that dropdown's `…TabNames` array (`gmToolsTabNames` /
+  `commishToolsTabNames`) so its toggle highlights correctly. All dropdowns
+  share one open/close implementation (`.tab-toggle`/`.tab-dropdown` classes,
+  not per-dropdown ids) — opening one closes any other that's open. Every
+  dropdown closes on an outside click *or* on a click into `#tab-frame` — the
+  latter needs its own handling (`window`'s `blur` event) since a click
+  inside an iframe never bubbles to the parent document, so a plain
+  document-level click listener alone can't catch it. This header only wraps
+  a page when it's reached *through* the tab bar (i.e. loaded inside
+  `#tab-frame`) — GMs reach `live-draft.html`/`my-board.html` via a direct
+  shareable link instead, which bypasses `index.html` entirely. Those pages
+  (plus `live-scoring.html`, which can also be opened directly) detect this
+  with `window.self === window.top` and render their own small `.site-nav`
+  back-link row when true, so a GM arriving cold via their link isn't
+  stranded with no way to reach the rest of the site. Don't add this to
+  `draft-presentation.html`/`scoring-presentation.html` — those are
+  deliberately chrome-free full-bleed broadcast views, always opened
+  directly, never wrapped by `index.html`.
 - `scouting.html` — the scouting tool. Self-contained single file (HTML/CSS/JS,
   no dependencies, no build). This is where most of the historical-stats work
   has happened.
@@ -172,10 +192,24 @@ confuse the two):
   auth) returns them, for the roster editor in `live-draft.html`. Commissioner
   UI generates each GM a shareable link (`live-draft.html?gm=id&token=...`)
   rather than making them type a token.
-- No auth for spectators: `live-draft.html`'s landing screen has a third
-  "Just Watching" option alongside GM/Commissioner that just links straight
-  to `draft-presentation.html?year=...` — for anyone who wants to follow
-  along without a GM token or commish key.
+- No auth for spectators: `live-draft.html`'s landing screen (shown when
+  there's no saved session, no `?gm=&token=` link, and no `?mode=` param —
+  see below) has a third "Just Watching" option alongside GM/Commissioner
+  that just links straight to `draft-presentation.html?year=...` — for
+  anyone who wants to follow along without a GM token or commish key. Since
+  `index.html`'s top-level Live Draft tab now points directly at that same
+  presentation view (see `index.html` above), this picker option mostly
+  matters for someone who reached `live-draft.html` cold via a raw/shared
+  link rather than through the tab bar.
+- `?mode=gm` / `?mode=commish` (read into `landingMode`) skip that
+  three-option picker entirely and render the matching login form straight
+  away — this is what `index.html`'s "Join Live Draft" and "Live Draft
+  Setup" nav items link with. It only affects what the picker *shows*; a
+  saved session or a `?gm=&token=` link still short-circuits straight to a
+  logged-in view exactly as before, checked earlier in `init()` than
+  `landingMode` is ever consulted. `renderGmLoginForm()`/`renderCommishLoginForm()`
+  (plus their `attach…Handlers()` pairs) are shared between this deep-link
+  path and the normal picker-driven path, so there's one copy of each form.
 
 **Username+password is an alternate GM login, not a replacement for tokens.**
 A GM's `gm_registry` entry can carry `username` + `passwordHash`/`passwordSalt`

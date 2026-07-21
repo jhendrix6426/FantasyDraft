@@ -246,6 +246,13 @@ if (window.self === window.top) {
 const API_BASE = 'https://fantasy-draft.jhendrix6426.workers.dev';
 
 const params = new URLSearchParams(location.search);
+// index.html's GM Tools ("Join Live Draft") and Commissioner Tools ("Live
+// Draft Setup") nav items link here with ?mode=gm / ?mode=commish to skip
+// straight past the landing role-picker into the right login form — a raw
+// link with no mode (or a saved session, or a GM's own ?gm=&token= link)
+// still gets the normal picker/auto-login behavior, this only narrows what
+// the picker itself shows.
+const landingMode = params.get('mode'); // 'gm' | 'commish' | null
 const state = {
   year: parseInt(params.get('year')) || 2026,
   role: null,           // 'gm' | 'commish'
@@ -390,7 +397,7 @@ async function init() {
     return;
   }
 
-  setStatus('Choose your role to continue');
+  setStatus(landingMode === 'gm' ? 'Log in as GM to continue' : landingMode === 'commish' ? 'Log in as Commissioner to continue' : 'Choose your role to continue');
   render();
 }
 
@@ -844,7 +851,49 @@ function render() {
   if (modalBg && modalBg.classList.contains('open')) renderBoardModalContent();
 }
 
+function renderGmLoginForm() {
+  return `
+    <div class="card">
+      <div class="card-title">GM Login</div>
+      <div class="field"><label>Username</label><input type="text" id="gm-username"></div>
+      <div class="field"><label>Password</label><input type="password" id="gm-password"></div>
+      <button class="btn btn-primary" id="gm-password-login-btn">Log In</button>
+      <div class="error-msg" id="gm-password-login-error"></div>
+
+      <div class="login-divider"><span>or use your commissioner-issued link/token</span></div>
+
+      <div class="field"><label>Your Name</label>
+        <select id="gm-select">
+          <option value="">Select...</option>
+          ${state.gmsPublic.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
+      <button class="btn" id="gm-login-btn">Log In With Token</button>
+      <div class="error-msg" id="gm-login-error"></div>
+    </div>`;
+}
+function attachGmLoginFormHandlers() {
+  document.getElementById('gm-login-btn').onclick = loginAsGm;
+  document.getElementById('gm-password-login-btn').onclick = loginAsGmWithPassword;
+}
+
+function renderCommishLoginForm() {
+  return `
+    <div class="card">
+      <div class="card-title">Commissioner Login</div>
+      <div class="field"><label>Passphrase</label><input type="password" id="commish-key"></div>
+      <button class="btn btn-primary" id="commish-login-btn">Log In</button>
+      <div class="error-msg" id="commish-login-error"></div>
+    </div>`;
+}
+function attachCommishLoginFormHandlers() {
+  document.getElementById('commish-login-btn').onclick = loginAsCommish;
+}
+
 function renderLanding() {
+  if (landingMode === 'gm') return `<div id="login-forms">${renderGmLoginForm()}</div>`;
+  if (landingMode === 'commish') return `<div id="login-forms">${renderCommishLoginForm()}</div>`;
   return `
     <div class="landing-choice">
       <button class="btn" id="choose-gm">I'm a GM</button>
@@ -855,39 +904,15 @@ function renderLanding() {
   `;
 }
 function attachLandingHandlers() {
+  if (landingMode === 'gm') return attachGmLoginFormHandlers();
+  if (landingMode === 'commish') return attachCommishLoginFormHandlers();
   document.getElementById('choose-gm').onclick = () => {
-    document.getElementById('login-forms').innerHTML = `
-      <div class="card">
-        <div class="card-title">GM Login</div>
-        <div class="field"><label>Username</label><input type="text" id="gm-username"></div>
-        <div class="field"><label>Password</label><input type="password" id="gm-password"></div>
-        <button class="btn btn-primary" id="gm-password-login-btn">Log In</button>
-        <div class="error-msg" id="gm-password-login-error"></div>
-
-        <div class="login-divider"><span>or use your commissioner-issued link/token</span></div>
-
-        <div class="field"><label>Your Name</label>
-          <select id="gm-select">
-            <option value="">Select...</option>
-            ${state.gmsPublic.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field"><label>Your Token</label><input type="password" id="gm-token"></div>
-        <button class="btn" id="gm-login-btn">Log In With Token</button>
-        <div class="error-msg" id="gm-login-error"></div>
-      </div>`;
-    document.getElementById('gm-login-btn').onclick = loginAsGm;
-    document.getElementById('gm-password-login-btn').onclick = loginAsGmWithPassword;
+    document.getElementById('login-forms').innerHTML = renderGmLoginForm();
+    attachGmLoginFormHandlers();
   };
   document.getElementById('choose-commish').onclick = () => {
-    document.getElementById('login-forms').innerHTML = `
-      <div class="card">
-        <div class="card-title">Commissioner Login</div>
-        <div class="field"><label>Passphrase</label><input type="password" id="commish-key"></div>
-        <button class="btn btn-primary" id="commish-login-btn">Log In</button>
-        <div class="error-msg" id="commish-login-error"></div>
-      </div>`;
-    document.getElementById('commish-login-btn').onclick = loginAsCommish;
+    document.getElementById('login-forms').innerHTML = renderCommishLoginForm();
+    attachCommishLoginFormHandlers();
   };
 }
 

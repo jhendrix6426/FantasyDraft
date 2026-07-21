@@ -119,15 +119,25 @@
   </div>
   <nav class="tabs">
     <div class="tab-group">
-      <button class="active" id="gm-tools-toggle" type="button">GM Tools &#9662;</button>
+      <button class="active tab-toggle" id="gm-tools-toggle" type="button" data-dropdown="gm-tools-dropdown">GM Tools &#9662;</button>
       <div class="tab-dropdown" id="gm-tools-dropdown">
         <button class="active" data-tab="scouting">Scouting</button>
         <button data-tab="my-board">My Draft Board</button>
         <button data-tab="my-account">My Account</button>
+        <!-- Skips live-draft.html's role picker straight to the GM login form (see ?mode= handling there). -->
+        <button data-tab="join-live-draft" data-src="live-draft.html?mode=gm">Join Live Draft</button>
       </div>
     </div>
-    <button data-tab="live-draft">Live Draft</button>
-    <button data-tab="live-scoring">Live Scoring</button>
+    <div class="tab-group">
+      <button class="tab-toggle" id="commish-tools-toggle" type="button" data-dropdown="commish-tools-dropdown">Commissioner Tools &#9662;</button>
+      <div class="tab-dropdown" id="commish-tools-dropdown">
+        <button data-tab="live-draft-setup" data-src="live-draft.html?mode=commish">Live Draft Setup</button>
+        <button data-tab="scorekeeping" data-src="live-scoring.html">Scorekeeping</button>
+      </div>
+    </div>
+    <!-- Bump the year in these two alongside FANTASY_DRAFT_YEAR in the other pages. -->
+    <button data-tab="live-draft" data-src="draft-presentation.html?year=2026">Live Draft</button>
+    <button data-tab="live-scoring" data-src="scoring-presentation.html?year=2026">Live Scoring</button>
     <button data-tab="draft-history">Draft History</button>
     <button data-tab="records">Records</button>
   </nav>
@@ -138,42 +148,56 @@
 <script>
   const tabFrame = document.getElementById('tab-frame');
   const gmToolsToggle = document.getElementById('gm-tools-toggle');
-  const gmToolsDropdown = document.getElementById('gm-tools-dropdown');
+  const commishToolsToggle = document.getElementById('commish-tools-toggle');
   const topLevelTabs = document.querySelectorAll('nav.tabs > button[data-tab]');
-  const gmToolsItems = gmToolsDropdown.querySelectorAll('button[data-tab]');
-  const gmToolsTabNames = ['scouting', 'my-board', 'my-account'];
+  const allDropdownItems = document.querySelectorAll('.tab-dropdown button[data-tab]');
+  const allDropdowns = document.querySelectorAll('.tab-dropdown');
+  const allToggles = document.querySelectorAll('.tab-toggle');
+  const gmToolsTabNames = ['scouting', 'my-board', 'my-account', 'join-live-draft'];
+  const commishToolsTabNames = ['live-draft-setup', 'scorekeeping'];
 
+  // A button's src is data-tab + '.html' by default (e.g. "records" ->
+  // records.html), unless it needs to land somewhere else or with query
+  // params (e.g. Live Draft now opens the read-only presentation view, and
+  // Join Live Draft/Live Draft Setup skip straight past live-draft.html's
+  // role picker) — those set data-src explicitly and it wins.
   function setActiveTab(btn) {
     if (btn.disabled || btn.classList.contains('active')) return;
     topLevelTabs.forEach(b => b.classList.remove('active'));
-    gmToolsItems.forEach(b => b.classList.remove('active'));
+    allDropdownItems.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     gmToolsToggle.classList.toggle('active', gmToolsTabNames.includes(btn.dataset.tab));
-    tabFrame.src = btn.dataset.tab + '.html';
+    commishToolsToggle.classList.toggle('active', commishToolsTabNames.includes(btn.dataset.tab));
+    tabFrame.src = btn.dataset.src || (btn.dataset.tab + '.html');
     tabFrame.title = btn.textContent;
   }
 
   topLevelTabs.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn)));
-  gmToolsItems.forEach(btn => {
+  allDropdownItems.forEach(btn => {
     btn.addEventListener('click', () => {
       setActiveTab(btn);
-      gmToolsDropdown.classList.remove('open');
+      allDropdowns.forEach(d => d.classList.remove('open'));
     });
   });
 
-  gmToolsToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    gmToolsDropdown.classList.toggle('open');
+  allToggles.forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dropdown = document.getElementById(toggle.dataset.dropdown);
+      const wasOpen = dropdown.classList.contains('open');
+      allDropdowns.forEach(d => d.classList.remove('open'));
+      if (!wasOpen) dropdown.classList.add('open');
+    });
   });
-  gmToolsDropdown.addEventListener('click', (e) => e.stopPropagation());
-  document.addEventListener('click', () => gmToolsDropdown.classList.remove('open'));
+  allDropdowns.forEach(d => d.addEventListener('click', (e) => e.stopPropagation()));
+  document.addEventListener('click', () => allDropdowns.forEach(d => d.classList.remove('open')));
   // A click inside the tab iframe never bubbles to this document (it's a
   // separate document), so the listener above alone can't close the dropdown
   // when clicking into the page content — which is most of the visible page.
   // A click into the iframe shifts window focus there, firing blur on the
   // parent window; use that as the close signal instead.
   window.addEventListener('blur', () => {
-    if (document.activeElement === tabFrame) gmToolsDropdown.classList.remove('open');
+    if (document.activeElement === tabFrame) allDropdowns.forEach(d => d.classList.remove('open'));
   });
 </script>
 </body>
