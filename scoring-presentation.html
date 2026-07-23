@@ -278,6 +278,7 @@ function renderLeaderboard(ls) {
   }
   const sorted = [...ls.teams].sort((a, b) => b.seasonTotal - a.seasonTotal);
   const max = Math.max(1, ...sorted.map(t => t.seasonTotal));
+  const playerTotals = computePlayerSeasonTotals(ls);
 
   // FLIP animation: capture each row's current position before re-sorting,
   // so a rank change animates as a shuffle instead of an instant jump.
@@ -305,7 +306,7 @@ function renderLeaderboard(ls) {
         </div>
         <div class="lb-total">${t._changed && t._delta > 0 ? `<span class="lb-delta">+${t._delta}</span>` : ''}${t.seasonTotal}</div>
       </div>
-      <div class="lb-roster">${(t.roster || []).map(p => p.name).join(' &middot; ')}</div>
+      <div class="lb-roster">${(t.roster || []).map(p => `${p.name} (${r1(playerTotals[p.name] || 0)})`).join(' &middot; ')}</div>
     </div>`;
   }).join('');
 
@@ -349,6 +350,17 @@ function renderSpotlight(ls) {
     <div class="spotlight-name">${player}</div>
     <div class="spotlight-meta">${pts} pts</div>
   `;
+}
+
+// Every player's running total across all three days so far — used to show
+// each roster player's individual contribution next to their name.
+function computePlayerSeasonTotals(ls) {
+  const totals = {};
+  for (const day of ['thu', 'fri', 'sat']) {
+    const entries = (ls.days[day] && ls.days[day].entries) || [];
+    for (const e of entries) totals[e.player] = (totals[e.player] || 0) + e.pts;
+  }
+  return totals;
 }
 
 // Groups a day's raw entries into per-player totals, then by each player's
