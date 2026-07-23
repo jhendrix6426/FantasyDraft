@@ -155,9 +155,22 @@ body {
   -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 8px; line-height: 1.15;
 }
 .moment-sub { color: var(--text-dim); font-size: 16px; letter-spacing: .5px; }
+
+/* Low-key by default so it doesn't clutter the broadcast view — fully
+   visible on hover, still tappable at low opacity on touchscreens/TVs
+   that can't hover. */
+.fullscreen-btn {
+  position: fixed; top: 14px; right: 14px; z-index: 100;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 8px; width: 34px; height: 34px; font-size: 17px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; opacity: 0.35;
+  transition: opacity .2s, border-color .2s, color .2s;
+}
+.fullscreen-btn:hover { opacity: 1; border-color: var(--gold); color: var(--gold-bright); }
 </style>
 </head>
 <body>
+  <button class="fullscreen-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle fullscreen">⛶</button>
   <div class="strip">
     <div class="strip-left" id="strip-left">Fantasy Draft</div>
     <div class="strip-title" id="strip-title">Live Scoring</div>
@@ -175,6 +188,23 @@ const params = new URLSearchParams(location.search);
 const YEAR = parseInt(params.get('year')) || 2026;
 const DAY_LABEL = { thu: 'Thu', fri: 'Fri', sat: 'Sat' };
 const DAY_LABEL_FULL = { thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
+
+// For a TV/kiosk setup where a keyboard shortcut isn't convenient — button
+// itself stays low-opacity (see .fullscreen-btn) so it doesn't clutter the
+// broadcast view, and its icon/tooltip track actual fullscreen state so it
+// stays correct even if fullscreen is exited via Escape or the OS itself
+// rather than this button.
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+document.addEventListener('fullscreenchange', () => {
+  const btn = document.getElementById('fullscreen-btn');
+  if (!btn) return;
+  const isFull = !!document.fullscreenElement;
+  btn.textContent = isFull ? '⤢' : '⛶';
+  btn.title = isFull ? 'Exit fullscreen' : 'Toggle fullscreen';
+});
 
 // Stable per-team accent colors — assigned in first-seen order (not hashed,
 // which can collide between two team ids and give them the same color) so
