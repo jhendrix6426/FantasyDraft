@@ -306,7 +306,7 @@ function renderLeaderboard(ls) {
         </div>
         <div class="lb-total">${t._changed && t._delta > 0 ? `<span class="lb-delta">+${t._delta}</span>` : ''}${t.seasonTotal}</div>
       </div>
-      <div class="lb-roster">${(t.roster || []).map(p => `${p.name} (${r1(playerTotals[p.name] || 0)})`).join(' &middot; ')}</div>
+      <div class="lb-roster">${[...(t.roster || [])].sort((a, b) => (playerTotals[b.name] || 0) - (playerTotals[a.name] || 0)).map(p => `${p.name} (${r1(playerTotals[p.name] || 0)})`).join(' &middot; ')}</div>
     </div>`;
   }).join('');
 
