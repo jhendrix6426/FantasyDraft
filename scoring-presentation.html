@@ -66,9 +66,15 @@ body {
 .leaderboard-wrap { flex: 1; display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
 .lb-row {
   flex: 1; min-height: 0;
-  display: flex; align-items: center; gap: 26px; position: relative;
-  padding: 0 30px; border-radius: 16px; background: rgba(255,255,255,0.015);
+  display: flex; flex-direction: column; justify-content: center; gap: 10px; position: relative;
+  padding: 14px 30px; border-radius: 16px; background: rgba(255,255,255,0.015);
   border: 1px solid transparent;
+}
+.lb-row-main { display: flex; align-items: center; gap: 26px; }
+/* EXPERIMENTAL — roster listing under name/bar, see if it's useful or too busy. */
+.lb-roster {
+  color: var(--text-dim); font-size: 15px; letter-spacing: .3px; line-height: 1.5;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .lb-row.flash { animation: rowFlash 1.3s ease; }
 @keyframes rowFlash {
@@ -288,15 +294,18 @@ function renderLeaderboard(ls) {
     const color = colorForGm(t.gm);
     return `
     <div class="lb-row ${t._changed ? 'flash' : ''}" data-gm="${t.gm}" style="--team-a:${color.a};--team-b:${color.b}">
-      <div class="lb-rank">${i === 0 ? '<span class="lb-crown">&#9812;</span>' : ''}${i + 1}</div>
-      <div class="lb-name">${gmName(t.gm)}</div>
-      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(t.seasonTotal / max) * 100}%"></div></div>
-      <div class="lb-days">
-        <div class="day-chip">THU<b>${t.dayTotals.thu}</b></div>
-        <div class="day-chip">FRI<b>${t.dayTotals.fri}</b></div>
-        <div class="day-chip">SAT<b>${t.dayTotals.sat}</b></div>
+      <div class="lb-row-main">
+        <div class="lb-rank">${i === 0 ? '<span class="lb-crown">&#9812;</span>' : ''}${i + 1}</div>
+        <div class="lb-name">${gmName(t.gm)}</div>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(t.seasonTotal / max) * 100}%"></div></div>
+        <div class="lb-days">
+          <div class="day-chip">THU<b>${t.dayTotals.thu}</b></div>
+          <div class="day-chip">FRI<b>${t.dayTotals.fri}</b></div>
+          <div class="day-chip">SAT<b>${t.dayTotals.sat}</b></div>
+        </div>
+        <div class="lb-total">${t._changed && t._delta > 0 ? `<span class="lb-delta">+${t._delta}</span>` : ''}${t.seasonTotal}</div>
       </div>
-      <div class="lb-total">${t._changed && t._delta > 0 ? `<span class="lb-delta">+${t._delta}</span>` : ''}${t.seasonTotal}</div>
+      <div class="lb-roster">${(t.roster || []).map(p => p.name).join(' &middot; ')}</div>
     </div>`;
   }).join('');
 
