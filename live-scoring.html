@@ -569,7 +569,7 @@ function renderFormatColumn(format, players, dayEntries, roundsByFormat) {
         </div>
       </div>
       ${expected ? '' : `<div class="hint" style="color:var(--red); margin-bottom:8px">⚠ Round count not set yet — set it above before entering results.</div>`}
-      <div class="field"><input type="text" data-search-format="${format}" placeholder="Search ${FMT_CODE_TO_NAME[format] || format} players..." value="${search.replace(/"/g,'&quot;')}"></div>
+      <div class="field"><input type="text" id="search-${format}" data-search-format="${format}" placeholder="Search ${FMT_CODE_TO_NAME[format] || format} players..." value="${search.replace(/"/g,'&quot;')}"></div>
       <div class="player-list">${rows}</div>
     </div>
   `;
