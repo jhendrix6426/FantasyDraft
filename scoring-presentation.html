@@ -380,12 +380,62 @@ function computeDayBreakdown(day, entries, teams) {
   return { totals, byFormat };
 }
 
+// Season-wide record content — separate from the per-day loop below since
+// none of this is tied to a specific day's entries: "did you know" call-outs
+// for anyone playing this year who already holds an all-time record, plus
+// live tracking of how close this year's best individual/team total is to
+// the all-time season/team records. Runs even before any scores are entered
+// (pure history), unlike the day-based items which need real entries.
+function buildRecordItems(ls) {
+  if (!recordsBook || typeof RecordsBook === 'undefined') return [];
+  const items = [];
+
+  const seen = new Set();
+  for (const t of ls.teams) {
+    const gm = gmName(t.gm);
+    if (!seen.has(gm)) {
+      seen.add(gm);
+      for (const r of RecordsBook.recordsForPlayer(recordsBook, gm)) {
+        items.push(`&#127942; ${gm} holds the all-time ${r.label}: ${r.value} (${r.year})`);
+      }
+    }
+    for (const p of (t.roster || [])) {
+      if (seen.has(p.name)) continue;
+      seen.add(p.name);
+      for (const r of RecordsBook.recordsForPlayer(recordsBook, p.name)) {
+        items.push(`&#127942; ${p.name} holds the all-time ${r.label}: ${r.value} (${r.year})`);
+      }
+    }
+  }
+
+  const playerTotals = computePlayerSeasonTotals(ls);
+  const topPlayer = Object.entries(playerTotals).sort((a, b) => b[1] - a[1])[0];
+  if (topPlayer && recordsBook.seasonTotal) {
+    const [name, pts] = topPlayer;
+    const diff = r1(recordsBook.seasonTotal.pts - pts);
+    if (diff > 0) {
+      items.push(`${name} is <span class="rec">${diff} pts off</span> the all-time season record (${recordsBook.seasonTotal.pts}, ${recordsBook.seasonTotal.player} ${recordsBook.seasonTotal.year})`);
+    }
+  }
+
+  if (recordsBook.teamScore && ls.teams.length) {
+    const topTeam = [...ls.teams].sort((a, b) => b.seasonTotal - a.seasonTotal)[0];
+    const diff = r1(recordsBook.teamScore.pts - topTeam.seasonTotal);
+    if (diff > 0) {
+      items.push(`${gmName(topTeam.gm)} is <span class="rec">${diff} pts off</span> the all-time team score record (${recordsBook.teamScore.pts}, ${recordsBook.teamScore.gm} ${recordsBook.teamScore.year})`);
+    }
+  }
+
+  return items;
+}
+
 // The persistent "spotlight" box (above) already covers the single overall
 // leader of the most recently active day — this rotation exists to surface
 // everything that box doesn't: per-format leaders, ongoing record-distance
 // tracking (not just the one-time popup when someone actually crosses the
-// line), and a recap for any earlier day the spotlight has since moved on
-// from. A plain player headcount was the whole ticker before; it's gone.
+// line), a recap for any earlier day the spotlight has since moved on from,
+// and season-wide record context from buildRecordItems above. A plain
+// player headcount was the whole ticker before; it's gone.
 function buildTickerItems(ls) {
   const items = [];
   for (const day of ['thu', 'fri', 'sat']) {
@@ -415,6 +465,7 @@ function buildTickerItems(ls) {
       }
     }
   }
+  items.push(...buildRecordItems(ls));
   return items.length ? items : ['Live scoring will appear here once entries start coming in'];
 }
 
