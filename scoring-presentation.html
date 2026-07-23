@@ -368,16 +368,39 @@ function computeDayBreakdown(day, entries, teams) {
   return { totals, byFormat };
 }
 
+// The persistent "spotlight" box (above) already covers the single overall
+// leader of the most recently active day — this rotation exists to surface
+// everything that box doesn't: per-format leaders, ongoing record-distance
+// tracking (not just the one-time popup when someone actually crosses the
+// line), and a recap for any earlier day the spotlight has since moved on
+// from. A plain player headcount was the whole ticker before; it's gone.
 function buildTickerItems(ls) {
   const items = [];
   for (const day of ['thu', 'fri', 'sat']) {
     const dayData = ls.days[day];
     if (!dayData || !dayData.entries.length) continue;
     const isFinal = dayData.status === 'final';
-    const { totals } = computeDayBreakdown(day, dayData.entries, ls.teams);
-    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 1) {
-      items.push(`${DAY_LABEL[day]} field: ${sorted.length} players scoring so far`);
+    const { totals, byFormat } = computeDayBreakdown(day, dayData.entries, ls.teams);
+    const sortedOverall = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+
+    if (sortedOverall.length) {
+      const [player, pts] = sortedOverall[0];
+      items.push(`${DAY_LABEL_FULL[day]} ${isFinal ? 'top scorer' : 'leader'}: ${player} — ${pts} pts`);
+    }
+
+    for (const [fmt, list] of Object.entries(byFormat)) {
+      if (!list.length) continue;
+      const best = [...list].sort((a, b) => b.pts - a.pts)[0];
+      const fmtLabel = (typeof RecordsBook !== 'undefined' && RecordsBook.FMT_LABEL[fmt]) || fmt;
+      items.push(`${fmtLabel} pace-setter: ${best.player} — ${best.pts} pts`);
+
+      const record = recordsBook && recordsBook.formatHighScore && recordsBook.formatHighScore[fmt];
+      if (record) {
+        const diff = r1(record.pts - best.pts);
+        if (diff > 0) {
+          items.push(`${best.player} is <span class="rec">${diff} pts off</span> the all-time ${fmtLabel} record (${record.pts}, ${record.player} ${record.year})`);
+        }
+      }
     }
   }
   return items.length ? items : ['Live scoring will appear here once entries start coming in'];
