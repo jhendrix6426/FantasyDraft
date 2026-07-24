@@ -8,6 +8,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* Zero-glyph override: JetBrains Mono's default "0" has a dot through the
+   middle (to disambiguate from O), which reads as a decimal point at a
+   glance on a scoreboard. Swaps in a plain zero for just U+0030, subsetted
+   from Roboto Mono per weight so it matches JetBrains Mono's stroke weight
+   closely — everything else still comes from JetBrains Mono itself. Must
+   stay declared after the Google Fonts <link> above so this later rule wins
+   for that one codepoint (CSS uses the last matching @font-face when
+   unicode-ranges overlap). */
+@font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-style: normal; unicode-range: U+0030; src: url('assets/zero-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-style: normal; unicode-range: U+0030; src: url('assets/zero-500.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 600; font-style: normal; unicode-range: U+0030; src: url('assets/zero-600.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-style: normal; unicode-range: U+0030; src: url('assets/zero-700.woff2') format('woff2'); }
 :root {
   --bg: #08080a;
   --panel: #131317;
