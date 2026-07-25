@@ -16,6 +16,8 @@
   const DAY_LABEL = {thu:'Thu',fri:'Fri',sat:'Sat'};
   const DAY_ORDER = ['thu','fri','sat'];
   const MIN_WINPCT_MATCHES = 5;
+  const MIN_SEASONS_FOR_AVG = 2; // a 1-season player's "average" would just equal their season total
+  const DEFAULT_COUNT_PER_DAY = 7; // mirrors worker.js's DEFAULT_SCORING_CONFIG.countPerDay — records.js has no live config to read, this is the same default
 
   function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null; }
   function r1(n) { return n!==null && n!==undefined ? Math.round(n*10)/10 : null; }
@@ -266,6 +268,73 @@
     return best;
   }
 
+  // Sums each player's pts across every season they were drafted, grouped by
+  // normName() rather than exact string so cross-year spelling drift (e.g.
+  // the Jacob/Jake Antonetz alias above) doesn't silently split one player's
+  // career into two. Display name is whichever spelling appeared most
+  // recently. Shared by computeCareerTotal and computeCareerAverage below so
+  // the grouping logic exists in exactly one place.
+  function careerTotalsByPlayer(seasons) {
+    const byPlayer = {};
+    for (const s of seasons) {
+      const key = normName(s.player);
+      if (!byPlayer[key]) byPlayer[key] = { pts: 0, entries: [] };
+      byPlayer[key].pts += s.pts;
+      byPlayer[key].entries.push({ year: s.year, name: s.player });
+    }
+    return Object.values(byPlayer).map(data => {
+      const entries = data.entries.sort((a, b) => a.year - b.year);
+      return { player: entries[entries.length - 1].name, pts: r1(data.pts), seasons: entries.length, years: entries.map(e => e.year) };
+    });
+  }
+
+  function computeCareerTotal(seasons) {
+    let best = null;
+    for (const t of careerTotalsByPlayer(seasons)) if (!best || t.pts > best.pts) best = t;
+    return best;
+  }
+
+  // Career total ÷ seasons played — rewards sustained performance across
+  // years rather than one big outlier season (which is what seasonTotal
+  // already covers). Requires at least MIN_SEASONS_FOR_AVG seasons so a
+  // single-season player can't trivially "win" with their season total.
+  function computeCareerAverage(seasons) {
+    let best = null;
+    for (const t of careerTotalsByPlayer(seasons)) {
+      if (t.seasons < MIN_SEASONS_FOR_AVG) continue;
+      const avgPts = r1(t.pts / t.seasons);
+      if (!best || avgPts > best.avgPts) best = { player: t.player, avgPts, careerPts: t.pts, seasons: t.seasons, years: t.years };
+    }
+    return best;
+  }
+
+  // Best single-day team total across every team/year — distinct from
+  // teamScore (best full-draft/season total). Applies the same top-N-of-roster
+  // per-day rule as computeLivescoreState in worker.js, just computed here
+  // from each player's per-format breakdown (format -> day via FMT_TO_DAY)
+  // instead of raw live entries.
+  function computeBestTeamDay(DD) {
+    let best = null;
+    for (const [yr, data] of Object.entries(DD)) {
+      const year = parseInt(yr, 10);
+      for (const team of data.teams) {
+        for (const day of DAY_ORDER) {
+          const dayScores = team.players.map(p => {
+            let pts = 0;
+            for (const b of p.breakdown) {
+              const fmt = FMT_MAP[b.format];
+              if (fmt && FMT_TO_DAY[fmt] === day) pts += b.pts;
+            }
+            return pts;
+          }).sort((a, b) => b - a);
+          const dayTotal = r1(dayScores.slice(0, DEFAULT_COUNT_PER_DAY).reduce((s, v) => s + v, 0));
+          if (!best || dayTotal > best.pts) best = { gm: team.gm, year, day, pts: dayTotal };
+        }
+      }
+    }
+    return best;
+  }
+
   function compute(db) {
     const DD = processFantasyDraft(db);
     const seasons = draftedPlayerSeasons(DD);
@@ -278,7 +347,10 @@
       seasonWinPct: computeSeasonWinPct(db, seasons),
       winStreak: computeWinStreak(db, seasons),
       teamScore: computeTeamScore(DD),
-      draftSteal: computeDraftSteal(DD)
+      draftSteal: computeDraftSteal(DD),
+      careerTotal: computeCareerTotal(seasons),
+      careerAverage: computeCareerAverage(seasons),
+      bestTeamDay: computeBestTeamDay(DD)
     };
   }
 
@@ -310,6 +382,15 @@
     }
     if (book.draftSteal && namesMatch(book.draftSteal.player, playerName)) {
       out.push({ label: 'Best Draft Value Pick ("Steal")', value: `+${book.draftSteal.delta} vs. window (Pick #${book.draftSteal.pick})`, year: book.draftSteal.year });
+    }
+    if (book.careerTotal && namesMatch(book.careerTotal.player, playerName)) {
+      out.push({ label: 'Most Career Points', value: `${book.careerTotal.pts} pts (${book.careerTotal.seasons} seasons)`, year: book.careerTotal.years[book.careerTotal.years.length - 1] });
+    }
+    if (book.careerAverage && namesMatch(book.careerAverage.player, playerName)) {
+      out.push({ label: 'Highest Season Average', value: `${book.careerAverage.avgPts} pts/season (${book.careerAverage.seasons} seasons)`, year: book.careerAverage.years[book.careerAverage.years.length - 1] });
+    }
+    if (book.bestTeamDay && namesMatch(book.bestTeamDay.gm, playerName)) {
+      out.push({ label: 'Best Single-Day Team Score (as GM)', value: `${book.bestTeamDay.pts} pts (${DAY_LABEL[book.bestTeamDay.day]})`, year: book.bestTeamDay.year });
     }
     return out;
   }
@@ -349,6 +430,9 @@
     const badges = [];
     if (book.teamScore && book.teamScore.year === year && namesMatch(book.teamScore.gm, gmName)) {
       badges.push('Best Single-Draft Team Score');
+    }
+    if (book.bestTeamDay && book.bestTeamDay.year === year && namesMatch(book.bestTeamDay.gm, gmName)) {
+      badges.push(`Best Single-Day Team Score (${DAY_LABEL[book.bestTeamDay.day]})`);
     }
     return badges;
   }

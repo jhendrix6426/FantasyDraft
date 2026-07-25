@@ -227,9 +227,18 @@ function render(book) {
 
   const ts = book.teamScore;
   const dsteal = book.draftSteal;
+  const btd = book.bestTeamDay;
   const fantasyTiles = [
     tile('Best Single-Draft Team Score', ts && ts.gm, ts ? `<strong>${ts.pts}</strong> pts` : '', ts && ts.year, ts ? 'GM' : '', `onclick="openRecordDetail('teamScore')"`),
-    tile('Best Draft Value Pick ("Steal")', dsteal && dsteal.player, dsteal ? `<strong>+${dsteal.delta}</strong> vs. window` : '', dsteal && dsteal.year, dsteal ? `Pick #${dsteal.pick} · drafted by ${dsteal.gm}` : '', `onclick="openRecordDetail('draftSteal')"`)
+    tile('Best Draft Value Pick ("Steal")', dsteal && dsteal.player, dsteal ? `<strong>+${dsteal.delta}</strong> vs. window` : '', dsteal && dsteal.year, dsteal ? `Pick #${dsteal.pick} · drafted by ${dsteal.gm}` : '', `onclick="openRecordDetail('draftSteal')"`),
+    tile('Best Single-Day Team Score', btd && btd.gm, btd ? `<strong>${btd.pts}</strong> pts` : '', btd && btd.year, btd ? `GM · ${RecordsBook.DAY_LABEL[btd.day]}` : '', `onclick="openRecordDetail('bestTeamDay')"`)
+  ].join('');
+
+  const ct = book.careerTotal;
+  const ca = book.careerAverage;
+  const careerTiles = [
+    tile('Most Career Points', ct && ct.player, ct ? `<strong>${ct.pts}</strong> pts` : '', ct ? ct.years.join(', ') : '', ct ? `${ct.seasons} seasons` : '', `onclick="openRecordDetail('careerTotal')"`),
+    tile('Highest Season Average', ca && ca.player, ca ? `<strong>${ca.avgPts}</strong> pts/season` : '', ca ? ca.years.join(', ') : '', ca ? `${ca.seasons} seasons · min. 2` : '', `onclick="openRecordDetail('careerAverage')"`)
   ].join('');
 
   app.innerHTML = `
@@ -244,6 +253,11 @@ function render(book) {
     <div class="card">
       <div class="card-title">Season &amp; Streak Records</div>
       <div class="record-grid">${seasonTiles}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Career Records</div>
+      <div class="record-grid">${careerTiles}</div>
+      <div class="hint">Spans every season a player's been drafted — Most Career Points is a straight sum; Highest Season Average is career points ÷ seasons played (minimum 2 seasons, so a single big year can't stand in for consistency).</div>
     </div>
     <div class="card">
       <div class="card-title">Fantasy Draft Records</div>
@@ -353,6 +367,63 @@ function openRecordDetail(type, key) {
       <table class="rm-tbl">
         <thead><tr><th>Pick</th><th>Player</th><th class="r">Pts</th></tr></thead>
         <tbody>${r.window.map(w => `<tr><td>#${w.pick}</td><td>${w.player}</td><td class="r">${w.pts}</td></tr>`).join('')}</tbody>
+      </table>
+    `);
+
+  } else if (type === 'careerTotal') {
+    const r = book.careerTotal;
+    const rows = r.years.map(y => {
+      const yearData = book.DD[y];
+      let pts = null;
+      for (const team of yearData.teams) {
+        const p = team.players.find(pl => RecordsBook.namesMatch(pl.name, r.player));
+        if (p) { pts = p.pts; break; }
+      }
+      return `<tr><td>${y}</td><td class="r">${pts === null ? '—' : pts}</td></tr>`;
+    }).join('');
+    modalOpen('Most Career Points', `${r.player} · ${r.seasons} seasons`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Year</th><th class="r">Pts</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td><strong>Career Total</strong></td><td class="r"><strong>${r.pts}</strong></td></tr></tfoot>
+      </table>
+    `);
+
+  } else if (type === 'careerAverage') {
+    const r = book.careerAverage;
+    const rows = r.years.map(y => {
+      const yearData = book.DD[y];
+      let pts = null;
+      for (const team of yearData.teams) {
+        const p = team.players.find(pl => RecordsBook.namesMatch(pl.name, r.player));
+        if (p) { pts = p.pts; break; }
+      }
+      return `<tr><td>${y}</td><td class="r">${pts === null ? '—' : pts}</td></tr>`;
+    }).join('');
+    modalOpen('Highest Season Average', `${r.player} · ${r.seasons} seasons`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Year</th><th class="r">Pts</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td><strong>Career Total</strong></td><td class="r"><strong>${r.careerPts}</strong></td></tr></tfoot>
+      </table>
+      <div class="rm-line">${r.careerPts} pts ÷ ${r.seasons} seasons = <strong>${r.avgPts} pts/season</strong></div>
+      <div class="rm-hint">Minimum 2 seasons to qualify.</div>
+    `);
+
+  } else if (type === 'bestTeamDay') {
+    const r = book.bestTeamDay;
+    const yearData = book.DD[r.year];
+    const team = yearData.teams.find(t => t.gm === r.gm);
+    const dayFmts = Object.entries(RecordsBook.FMT_TO_DAY).filter(([, d]) => d === r.day).map(([f]) => f);
+    const rows = [...team.players].map(p => {
+      const dayPts = (p.breakdown || []).filter(b => dayFmts.includes(RecordsBook.FMT_MAP[b.format])).reduce((s, b) => s + b.pts, 0);
+      return { name: p.name, pts: dayPts };
+    }).sort((a, b) => b.pts - a.pts);
+    modalOpen('Best Single-Day Team Score', `${r.gm} (GM) · ${RecordsBook.DAY_LABEL[r.day]} ${r.year}`, `
+      <table class="rm-tbl">
+        <thead><tr><th>Player</th><th class="r">Pts</th></tr></thead>
+        <tbody>${rows.map((p, i) => `<tr><td>${p.name}${i < 7 ? '' : ' <span class="rm-hint" style="margin:0">(dropped)</span>'}</td><td class="r">${p.pts}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td><strong>${RecordsBook.DAY_LABEL[r.day]} Total (top 7)</strong></td><td class="r"><strong>${r.pts}</strong></td></tr></tfoot>
       </table>
     `);
   }
