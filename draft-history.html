@@ -330,13 +330,15 @@ const state = { view: 'years', year: null, expanded: new Set() };
 function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null; }
 function r1(n) { return n!==null && n!==undefined ? Math.round(n*10)/10 : null; }
 function fmtTag(f) { return `<span class="fmt-tag fmt-${f}">${FMT_LABEL[f]||f}</span>`; }
-// A breakdown entry flagged verified:false disagrees with the official-results
-// recompute (see fantasy-history.js) — shown with a ⚠ and both values rather
-// than silently trusting either one, so the discrepancy stays visible until
-// resolved by hand.
+// A breakdown entry's `verified` flag reflects the Commissioner Tools
+// "Verify Against Official Results" run (worker.js's /verify-official) — a
+// small ✓ once a format/player has been matched against Tim's official
+// results, no marker at all otherwise (not an alarming state: it just means
+// this line hasn't been checked yet, or has no official row to check against
+// — e.g. a mid-event drop — so the hand-entered value is standing in).
 function breakdownEntryHtml(b) {
-  if (b.verified === false) {
-    return `<span style="color:var(--red)" title="Hand-entered: ${b.pts} · Official recompute: ${b.officialPts} — these disagree and need manual review">⚠ ${b.format}: ${b.pts}</span>`;
+  if (b.verified === true) {
+    return `<span title="Confirmed against official Nationals results">${b.format}: ${b.pts} ✓</span>`;
   }
   return `${b.format}: ${b.pts}`;
 }
@@ -562,7 +564,6 @@ async function init() {
   try {
     const db = await fetch(API).then(r => r.json());
     await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
-    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     RAW_DB = db;
     processFantasyDraft(db);
     recordsBook = RecordsBook.compute(db);

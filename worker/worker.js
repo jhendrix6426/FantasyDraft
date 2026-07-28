@@ -35,6 +35,81 @@ const FMT_CODE_TO_NAME = { T1: 'T1 2-Player', T2: 'T2 2-Player', BD: 'Booster Dr
 // project's existing per-file-constant convention, not shared).
 const FMT_CODE_TO_DAY = { BD: 'thu', T2: 'thu', T1: 'fri', TA: 'fri', SD: 'sat', Teams: 'sat' };
 
+// Where the official, post-event Nationals results live — a public repo run
+// by Tim (a separate tournament-tracker tool, not this project), which the
+// commissioner updates directly from the on-site score sheets. This is the
+// source of truth for /verify-official below, for every year going forward
+// (not just the current one) — re-running that endpoint against this same
+// URL is exactly how a later correction on Tim's site gets picked up here.
+const OFFICIAL_RESULTS_URL = 'https://raw.githubusercontent.com/timothestes/redemption-tournament-tracker/main/public/data/nationals-history.json';
+
+// Same nickname/spelling aliases as records.js's namesMatch() — kept in sync
+// manually (this project's existing convention for small shared helpers,
+// see CLAUDE.md). Needed because Tim's official results sometimes spell a
+// player's name differently than how they're drafted here (e.g. "Jake
+// Antonetz" officially vs. "Jacob Antonetz" as drafted).
+function normOfficialName(n) {
+  return n.toLowerCase().trim().replace(/\s+/g, ' ')
+    .replace(/\bmitch\b/, 'mitchell')
+    .replace(/^dario villanova$/, 'dario dante villanova')
+    .replace(/^jacob antonetz$/, 'jake antonetz');
+}
+function officialNamesMatch(a, b) {
+  if (!a || !b) return false;
+  const na = normOfficialName(a), nb = normOfficialName(b);
+  if (na === nb) return true;
+  const pa = na.split(' '), pb = nb.split(' ');
+  if (pa.length < 2 || pb.length < 2) return false;
+  if (pa[pa.length - 1] !== pb[pb.length - 1]) return false;
+  const fa = pa[0], fb = pb[0];
+  return fa === fb || fa.startsWith(fb) || fb.startsWith(fa);
+}
+
+// Tim's results rows carry the player's final tournament point total as
+// free text in `notes`, e.g. "20.5pts / 20 LSD" — this is the tournament's
+// own already-computed total (not something reconstructed from individual
+// matches), so it's immune to the round-by-round ambiguity a bye vs. a
+// mid-event drop would otherwise create (a drop just means the player has
+// no row here at all, which callers treat as "no official data available"
+// and fall back to the hand-entered total, rather than guessing).
+function parseOfficialPts(notes) {
+  if (!notes) return null;
+  const m = String(notes).match(/([\d.]+)\s*pts/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Looks up every rostered player's official per-format point total for a
+// year directly from Tim's site, keyed the same way computeFantasyDraftHistory
+// keys its own breakdown (playerName -> {format: pts}). Only includes
+// formats that actually resolved to an official row — a missing row (e.g. a
+// player who dropped mid-event, like Sealed's results table can have) is
+// simply absent from the returned map, not a zero.
+async function fetchOfficialScores(year, roster) {
+  const res = await fetch(OFFICIAL_RESULTS_URL, { cf: { cacheTtl: 0 } });
+  if (!res.ok) throw new Error(`Could not fetch official results (${res.status})`);
+  const officialDb = await res.json();
+  const results = officialDb.results || {};
+
+  const scores = {}; // "<playerName>|<verboseFormat>" -> pts
+  const resolvedFormats = new Set();
+  for (const p of roster) {
+    for (const day of VALID_DAYS) {
+      const fmtCode = p[day];
+      if (!fmtCode) continue;
+      const verbose = FMT_CODE_TO_NAME[fmtCode];
+      if (!verbose) continue;
+      const rows = results[`${year}_${verbose}`];
+      if (!rows) continue;
+      resolvedFormats.add(verbose);
+      const row = rows.find(r => officialNamesMatch(r.playerName, p.name));
+      if (!row) continue;
+      const pts = parseOfficialPts(row.notes);
+      if (pts !== null) scores[`${p.name}|${verbose}`] = pts;
+    }
+  }
+  return { scores, resolvedFormats: [...resolvedFormats], fetchedAt: Date.now() };
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -219,14 +294,16 @@ async function computeLivescoreState(env, year) {
 // draft's roster/scores only become "history" once the commissioner has
 // locked them in.
 async function computeFantasyDraftHistory(env, year) {
-  const [livedraft, gmRegistry, livescore, players, config] = await Promise.all([
+  const [livedraft, gmRegistry, livescore, players, config, official] = await Promise.all([
     env.FANTASY_DB.get('livedraft_' + year, 'json'),
     env.FANTASY_DB.get('gm_registry', 'json'),
     env.FANTASY_DB.get('livescore_' + year, 'json'),
     env.FANTASY_DB.get('players_' + year, 'json'),
     env.FANTASY_DB.get('scoring_config', 'json'),
+    env.FANTASY_DB.get('official_' + year, 'json'),
   ]);
   if (!livedraft || !livedraft.finalized) return null;
+  const officialScores = (official && official.scores) || {};
 
   const gmName = {};
   for (const g of (gmRegistry || [])) gmName[g.id] = g.name;
@@ -248,6 +325,24 @@ async function computeFantasyDraftHistory(env, year) {
     }
   }
 
+  // A player's day score is the official Nationals total for that day's
+  // format when /verify-official has resolved one (see below), else the
+  // hand-entered live-scoring total — the same fallback rule
+  // fetchOfficialScores documents (no official row, e.g. a mid-event drop,
+  // just means there's nothing to override with). Routing every day-score
+  // read through this one function is what keeps the top-countPerDay-of-9
+  // rule below correctly reflecting official corrections without
+  // duplicating that rule anywhere.
+  function playerDayScore(name, day) {
+    const fmtCode = (playerInfo[name] || {})[day];
+    const rawPts = (dayTotalsByPlayer[name] && dayTotalsByPlayer[name][day]) || 0;
+    if (!fmtCode) return { pts: rawPts, verified: false };
+    const verbose = FMT_CODE_TO_NAME[fmtCode];
+    const officialPts = verbose ? officialScores[`${name}|${verbose}`] : undefined;
+    if (officialPts !== undefined) return { pts: officialPts, verified: true };
+    return { pts: rawPts, verified: false };
+  }
+
   const rosterByGm = {};
   for (const pick of (livedraft.picks || [])) {
     (rosterByGm[pick.gm] = rosterByGm[pick.gm] || []).push(pick);
@@ -257,11 +352,13 @@ async function computeFantasyDraftHistory(env, year) {
     const rosterNames = gmPicks.map(p => p.player);
 
     // Team pts uses the same top-countPerDay-of-roster-per-day rule as
-    // computeLivescoreState, so this matches what live-scoring already shows.
+    // computeLivescoreState, so this matches what live-scoring already
+    // shows — just fed by playerDayScore's (possibly official-corrected)
+    // per-day values instead of the raw entry sums directly.
     let seasonTotal = 0;
     for (const day of VALID_DAYS) {
       const scores = rosterNames
-        .map(name => (dayTotalsByPlayer[name] && dayTotalsByPlayer[name][day]) || 0)
+        .map(name => playerDayScore(name, day).pts)
         .sort((a, b) => b - a);
       seasonTotal += scores.slice(0, countPerDay).reduce((s, v) => s + v, 0);
     }
@@ -274,9 +371,9 @@ async function computeFantasyDraftHistory(env, year) {
       for (const day of VALID_DAYS) {
         const fmtCode = info[day];
         if (!fmtCode) continue; // not registered to play this day
-        const dayPts = (dayTotalsByPlayer[name] && dayTotalsByPlayer[name][day]) || 0;
+        const { pts: dayPts, verified } = playerDayScore(name, day);
         const verbose = FMT_CODE_TO_NAME[fmtCode];
-        if (verbose) breakdown.push({ format: verbose, pts: r1(dayPts) });
+        if (verbose) breakdown.push({ format: verbose, pts: r1(dayPts), verified });
         pts += dayPts;
       }
       return { name, pts: r1(pts), draftPick: pick.pickNumber, breakdown };
@@ -285,7 +382,7 @@ async function computeFantasyDraftHistory(env, year) {
     return { gm: gmName[gmId] || gmId, pts: r1(seasonTotal), players: teamPlayers };
   });
 
-  return { year: Number(year), finalized: true, teams };
+  return { year: Number(year), finalized: true, teams, officialVerifiedAt: official ? official.verifiedAt : null };
 }
 
 async function handleRequest(request, env) {
@@ -650,6 +747,79 @@ async function handleRequest(request, env) {
     const history = await computeFantasyDraftHistory(env, year);
     if (!history) return conflict('Draft is not finalized');
     return json(history);
+  }
+
+  // Commissioner-triggered, re-runnable at any time: pulls this year's
+  // rostered players' official per-format totals from Tim's site (see
+  // OFFICIAL_RESULTS_URL) and persists them as official_<year>, which
+  // computeFantasyDraftHistory above then prefers over hand-entered
+  // live-scoring totals wherever a match was found — correctly re-deriving
+  // team pts through the same top-countPerDay-of-9 rule in the process,
+  // not just overwriting player totals in isolation. Re-running this later
+  // (e.g. once Tim's site adds a format it didn't have data for yet, or
+  // after a post-event correction there) simply replaces official_<year>
+  // wholesale; it never touches the underlying livescore_<year> entries,
+  // so the original hand-entered record is never lost.
+  if (path.endsWith('/verify-official') && path.startsWith('/fantasy/livedraft/') && method === 'POST') {
+    if (!requireCommish(request, env)) return unauthorized();
+    const year = parts[3];
+    const [livedraft, players, beforeHistory] = await Promise.all([
+      env.FANTASY_DB.get('livedraft_' + year, 'json'),
+      env.FANTASY_DB.get('players_' + year, 'json'),
+      computeFantasyDraftHistory(env, year),
+    ]);
+    if (!livedraft || !livedraft.finalized) return conflict('Draft is not finalized');
+    if (!beforeHistory) return conflict('Draft is not finalized');
+
+    const roster = buildRosterList(livedraft.picks || [], players || []);
+    let fetched;
+    try {
+      fetched = await fetchOfficialScores(year, roster);
+    } catch (e) {
+      return json({ error: 'Could not reach official results: ' + e.message }, 502);
+    }
+
+    const official = { verifiedAt: Date.now(), source: OFFICIAL_RESULTS_URL, scores: fetched.scores };
+    await env.FANTASY_DB.put('official_' + year, JSON.stringify(official));
+
+    const afterHistory = await computeFantasyDraftHistory(env, year);
+
+    // Diff report for the UI — every breakdown line that actually changed,
+    // plus which rostered player+format combos still have no official row
+    // (a legitimate drop, or a format Tim's site doesn't have data for yet).
+    const changes = [];
+    const unresolved = [];
+    const beforeByGm = Object.fromEntries(beforeHistory.teams.map(t => [t.gm, t]));
+    for (const team of afterHistory.teams) {
+      const beforeTeam = beforeByGm[team.gm];
+      for (const player of team.players) {
+        const beforePlayer = beforeTeam && beforeTeam.players.find(p => p.name === player.name);
+        for (const entry of player.breakdown) {
+          const beforeEntry = beforePlayer && beforePlayer.breakdown.find(b => b.format === entry.format);
+          if (entry.verified) {
+            if (!beforeEntry || Math.abs(beforeEntry.pts - entry.pts) > 0.001) {
+              changes.push({ gm: team.gm, player: player.name, format: entry.format, oldPts: beforeEntry ? beforeEntry.pts : null, newPts: entry.pts });
+            }
+          } else if (fetched.resolvedFormats.includes(entry.format)) {
+            // This format has official data for this year, but not for this
+            // specific player (e.g. they dropped before finishing) — worth
+            // surfacing distinctly from "format not covered by Tim's site
+            // at all yet" (which computeFantasyDraftHistory can't tell
+            // apart from a genuine no-op, so it's derived here instead).
+            unresolved.push({ gm: team.gm, player: player.name, format: entry.format, pts: entry.pts });
+          }
+        }
+      }
+    }
+
+    return json({
+      ok: true,
+      verifiedAt: official.verifiedAt,
+      teams: afterHistory.teams.map(t => ({ gm: t.gm, pts: t.pts })),
+      changes,
+      unresolved,
+      resolvedFormats: fetched.resolvedFormats,
+    });
   }
 
   // ── GM draft boards ─────────────────────────────────────────

@@ -670,7 +670,6 @@ async function init() {
     if (!res.ok) throw new Error('HTTP '+res.status);
     const db = await res.json();
     await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
-    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     processNats(db);
     processFantasyDraft(db);
     processMatches(db);

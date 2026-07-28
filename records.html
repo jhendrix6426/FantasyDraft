@@ -434,7 +434,6 @@ async function init() {
   try {
     const db = await fetch(API).then(r => r.json());
     await FantasyHistory.mergeWorkerDraftHistory(db, FANTASY_DRAFT_YEAR, FANTASY_API_BASE);
-    FantasyHistory.reconcileWithOfficialResults(db, FANTASY_DRAFT_YEAR);
     currentDb = db;
     currentBook = RecordsBook.compute(db);
     const yearCount = Object.keys(currentBook.DD).length;

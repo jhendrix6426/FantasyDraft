@@ -283,6 +283,8 @@ const state = {
   pollTimer: null,
   submitting: false,
   error: null,
+  verifyResult: null,   // last /verify-official response, for the diff report
+  verifying: false,
 };
 
 // ── API helpers ──────────────────────────────────────────────
@@ -800,6 +802,26 @@ async function finalizeDraft() {
   } catch (e) { if (errEl) errEl.textContent = e.message; }
 }
 
+// Pulls this year's rostered players' official totals from Tim's site and
+// persists them server-side (worker.js's /verify-official) — safe to
+// re-run any time (e.g. once a format Tim's site was missing gets added, or
+// after a correction there), never touches the underlying hand-entered
+// live-scoring data. Result is a diff report, not a silent overwrite.
+async function runVerifyOfficial() {
+  state.verifying = true;
+  state.verifyResult = null;
+  render();
+  try {
+    const result = await commishFetch(`/fantasy/livedraft/${state.year}/verify-official`, 'POST');
+    state.verifyResult = result;
+  } catch (e) {
+    state.verifyResult = { error: e.message };
+  } finally {
+    state.verifying = false;
+    render();
+  }
+}
+
 function addToDraftOrder(gmId) {
   if (!draftOrderRows) draftOrderRows = [];
   if (!draftOrderRows.includes(gmId)) draftOrderRows.push(gmId);
@@ -1176,6 +1198,7 @@ function renderCommishView() {
         <div class="card-title" style="color: var(--green)">✓ Draft Finalized</div>
         <div class="hint">The roster for ${state.year} is permanently locked — undo, reset, and pool edits are disabled. Scoring can now proceed on top of this locked roster.</div>
       </div>
+      ${renderVerifyOfficialCard()}
       ` : `
       <div class="card" style="border-color: var(--green)">
         <div class="card-title" style="color: var(--green)">Finalize Draft</div>
@@ -1196,6 +1219,40 @@ function renderCommishView() {
   parts.push(renderPlayerPoolPanel());
   parts.push(renderLogout());
   return parts.join('');
+}
+
+function renderVerifyOfficialCard() {
+  const r = state.verifyResult;
+  let resultHtml = '';
+  if (state.verifying) {
+    resultHtml = `<div class="hint" style="margin-top:10px">Checking official results…</div>`;
+  } else if (r && r.error) {
+    resultHtml = `<div class="error-msg" style="margin-top:10px">${r.error}</div>`;
+  } else if (r) {
+    const changeRows = r.changes.map(c =>
+      `<div>${c.player} <span class="pool-avg">(${c.gm})</span> — ${c.format}: ${c.oldPts ?? '—'} → <strong>${c.newPts}</strong></div>`
+    ).join('') || '<div class="hint">No corrections needed — everything already matched.</div>';
+    const unresolvedRows = r.unresolved.length ? `
+      <div class="card-title" style="margin-top:14px; font-size:14px">Not yet resolved</div>
+      <div class="hint" style="margin-bottom:6px">Official results exist for this format, but not for this player specifically — likely a mid-event drop. Hand-entered value is standing in.</div>
+      ${r.unresolved.map(u => `<div>${u.player} <span class="pool-avg">(${u.gm})</span> — ${u.format}: ${u.pts}</div>`).join('')}
+    ` : '';
+    resultHtml = `
+      <div class="feed" style="margin-top:10px">
+        <div class="card-title" style="font-size:14px">Corrections applied</div>
+        ${changeRows}
+        ${unresolvedRows}
+      </div>
+      <div class="hint" style="margin-top:10px">Verified ${new Date(r.verifiedAt).toLocaleString()}. Team totals recalculated using the same top-7-of-9-per-day rule.</div>
+    `;
+  }
+  return `
+      <div class="card" style="border-color: var(--gold-bright)">
+        <div class="card-title" style="color: var(--gold-bright)">Verify Against Official Results</div>
+        <div class="hint" style="margin-bottom:10px">Pulls each rostered player's official per-format point total from Tim's tournament tracker and replaces the hand-entered total wherever a match is found (a player with no official row — e.g. a mid-event drop — keeps their hand-entered value). Safe to re-run any time; never touches the underlying live-scoring entries.</div>
+        <button class="btn" id="verify-official-btn" style="border-color: var(--gold-bright); color: var(--gold-bright)" ${state.verifying ? 'disabled' : ''}>Run Official Results Verification</button>
+        ${resultHtml}
+      </div>`;
 }
 
 function renderSetupPanel() {
@@ -1323,6 +1380,7 @@ function attachCommishHandlers() {
   const undo = document.getElementById('undo-btn'); if (undo) undo.onclick = undoPick;
   const reset = document.getElementById('reset-draft-btn'); if (reset) reset.onclick = resetDraft;
   const finalize = document.getElementById('finalize-draft-btn'); if (finalize) finalize.onclick = finalizeDraft;
+  const verifyOfficial = document.getElementById('verify-official-btn'); if (verifyOfficial) verifyOfficial.onclick = runVerifyOfficial;
   const poolFile = document.getElementById('pool-csv-file'); if (poolFile) poolFile.onchange = handlePoolFileUpload;
   const confirmMerge = document.getElementById('confirm-merge-btn'); if (confirmMerge) confirmMerge.onclick = mergeAndSavePlayerPool;
 
